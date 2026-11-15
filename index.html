@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6b3a">
+<title>Partes de Máquina</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="barra">
+  <button id="btnAtras" class="icono oculto" aria-label="Volver">‹</button>
+  <div class="titulo">
+    <strong id="tituloPantalla">Partes de Máquina</strong>
+    <small id="subtitulo"></small>
+  </div>
+  <span id="estadoRed" class="red" title="Conexión"></span>
+  <button id="btnMenu" class="icono oculto" aria-label="Menú">⋮</button>
+</header>
+
+<!-- ===== LOGIN ===== -->
+<main id="vLogin" class="vista oculto">
+  <div class="tarjeta">
+    <h2>Entrar</h2>
+    <p class="nota">Usa el email y la contraseña que te ha dado la oficina. Solo hace falta conexión la primera vez.</p>
+    <form id="formLogin">
+      <label>Email<input id="loginEmail" type="email" autocomplete="username" required></label>
+      <label>Contraseña<input id="loginClave" type="password" autocomplete="current-password" required></label>
+      <button class="principal" type="submit" id="btnEntrar">Entrar</button>
+    </form>
+    <p id="loginError" class="error oculto"></p>
+  </div>
+  <div class="tarjeta">
+    <p class="nota" id="notaDemo">¿Solo quieres verla? Pruébala con datos inventados.</p>
+    <button class="secundario" id="btnDemo">Probar en modo demostración</button>
+  </div>
+</main>
+
+<!-- ===== INICIO ===== -->
+<main id="vInicio" class="vista oculto">
+  <div id="avisoDemo" class="aviso oculto">MODO DEMOSTRACIÓN · datos inventados, no se envía nada a la oficina</div>
+  <button class="principal grande" id="btnNuevo">＋ Nuevo parte de máquina</button>
+  <div id="estadoEnvio" class="estado-envio"></div>
+  <button id="btnInstalar" class="secundario oculto">📲 Instalar la app en el móvil</button>
+  <section>
+    <h3 id="tPendientes">Pendientes de enviar</h3>
+    <ul id="listaPendientes" class="lista"></ul>
+  </section>
+  <section>
+    <h3>Enviados (últimos 30 días)</h3>
+    <ul id="listaEnviados" class="lista"></ul>
+  </section>
+</main>
+
+<!-- ===== PARTE ===== -->
+<main id="vParte" class="vista oculto">
+  <form id="formParte" novalidate>
+    <div class="tarjeta">
+      <div class="fila">
+        <label>Fecha<input id="pFecha" type="date" required></label>
+      </div>
+      <div class="fila dos">
+        <label>Hora inicio
+          <span class="con-boton"><input id="pHoraIni" type="time"><button type="button" data-ahora="pHoraIni" class="mini">Ahora</button></span>
+        </label>
+        <label>Hora fin
+          <span class="con-boton"><input id="pHoraFin" type="time"><button type="button" data-ahora="pHoraFin" class="mini">Ahora</button></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <label>Empresa / cliente *</label>
+      <button type="button" class="selector" id="pEmpresa" data-lista="empresas">Elegir empresa…</button>
+      <label>Clase</label>
+      <select id="pClase"></select>
+      <label>Faena *</label>
+      <button type="button" class="selector" id="pFaena" data-lista="faenas">Elegir faena…</button>
+      <label>Máquina</label>
+      <button type="button" class="selector" id="pMaquina" data-lista="maquinas">Elegir máquina…</button>
+    </div>
+
+    <div class="tarjeta">
+      <div class="cabecera-seccion">
+        <h3>Parcelas</h3>
+        <span id="resumenParcelas" class="nota"></span>
+      </div>
+      <input id="buscarParcela" type="search" placeholder="Buscar por polígono, parcela, paraje o cultivo" class="oculto">
+      <ul id="listaParcelas" class="parcelas"><li class="nota">Elige primero la empresa.</li></ul>
+      <button type="button" class="secundario" id="btnOtraParcela">＋ Parcela que no está en la lista</button>
+    </div>
+
+    <div class="tarjeta">
+      <label>Kilos transportados (si hubo transporte)<input id="pKilos" type="number" inputmode="decimal" min="0" step="any"></label>
+      <label>Observaciones<textarea id="pObs" rows="3" maxlength="200"></textarea></label>
+    </div>
+
+    <div class="tarjeta gps">
+      <h3>Ubicación</h3>
+      <p id="gpsEstado" class="nota">Sin ubicación</p>
+      <div class="fila dos">
+        <button type="button" class="secundario" id="btnGps">📍 Tomar ubicación</button>
+        <a id="gpsMapa" class="boton secundario oculto" target="_blank" rel="noopener">Ver en el mapa</a>
+      </div>
+    </div>
+
+    <p id="parteError" class="error oculto"></p>
+    <div class="pie-fijo">
+      <button type="button" class="peligro oculto" id="btnBorrarParte">Borrar</button>
+      <button type="submit" class="principal" id="btnGuardar">Guardar parte</button>
+    </div>
+  </form>
+</main>
+
+<!-- ===== SELECTOR (lista con buscador) ===== -->
+<div id="dlgSelector" class="dialogo oculto" role="dialog" aria-modal="true">
+  <div class="dialogo-caja">
+    <div class="dialogo-cabecera">
+      <strong id="selTitulo">Elegir</strong>
+      <button type="button" class="icono" id="selCerrar" aria-label="Cerrar">✕</button>
+    </div>
+    <input id="selBuscar" type="search" placeholder="Buscar…" autocomplete="off">
+    <ul id="selLista" class="lista seleccionable"></ul>
+  </div>
+</div>
+
+<!-- ===== PARCELA MANUAL ===== -->
+<div id="dlgParcela" class="dialogo oculto" role="dialog" aria-modal="true">
+  <form class="dialogo-caja" id="formOtraParcela">
+    <div class="dialogo-cabecera"><strong>Parcela que no está en la lista</strong>
+      <button type="button" class="icono" data-cerrar="dlgParcela" aria-label="Cerrar">✕</button></div>
+    <div class="fila dos">
+      <label>Polígono<input id="opPoligono" inputmode="numeric" required></label>
+      <label>Parcela<input id="opParcela" inputmode="numeric" required></label>
+    </div>
+    <label>Paraje<input id="opParaje"></label>
+    <label>Cultivo<input id="opCultivo"></label>
+    <p class="nota">La oficina la revisará y la dará de alta si hace falta.</p>
+    <button class="principal" type="submit">Añadir</button>
+  </form>
+</div>
+
+<!-- ===== MENÚ ===== -->
+<div id="dlgMenu" class="dialogo oculto" role="dialog" aria-modal="true">
+  <div class="dialogo-caja">
+    <div class="dialogo-cabecera"><strong id="menuUsuario"></strong>
+      <button type="button" class="icono" data-cerrar="dlgMenu" aria-label="Cerrar">✕</button></div>
+    <p class="nota" id="menuCatalogos"></p>
+    <button class="secundario" id="btnActCatalogos">⟳ Actualizar empresas y parcelas</button>
+    <button class="secundario" id="btnEnviarYa">⇪ Enviar pendientes ahora</button>
+    <button class="peligro" id="btnSalir">Cerrar sesión</button>
+  </div>
+</div>
+
+<div id="toast" class="toast oculto"></div>
+
+<script src="config.js"></script>
+<script src="db.js"></script>
+<script src="sync.js"></script>
+<script src="demo.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
