@@ -245,9 +245,9 @@ function htmlParcela(p, linea, manual) {
   const unidades = cat.unidades.map(u => `<option ${linea && linea.unidad === u.nombre ? 'selected' : ''}>${esc(u.nombre)}</option>`).join('');
   return `<li data-clave="${esc(clave)}" class="${linea ? 'marcada' : ''}">
     <label class="cab"><input type="checkbox" ${linea ? 'checked' : ''} ${ro ? 'disabled' : ''}>
-      <span class="txt"><b>Pol. ${esc(p.poligono)} · Parc. ${esc(p.parcela)}</b>
+      <span class="txt"><b>${p.poligono || p.parcela ? `Pol. ${esc(p.poligono || '?')} · Parc. ${esc(p.parcela || '?')}` : 'Parcela sin identificar'}</b>
       <span>${esc(p.paraje || '')}${p.tipo_cultivo ? ' · ' + esc(p.tipo_cultivo) : ''}${p.superficie ? ' · ' + fmt(p.superficie) + ' ha' : ''}</span>
-      ${manual ? '<span class="manual">AÑADIDA A MANO</span>' : ''}</span></label>
+      ${manual ? `<span class="manual">AÑADIDA A MANO${linea && linea.lat != null ? ' · 📍 SE BUSCARÁ EN EL CATASTRO' : ' · SIN UBICACIÓN'}</span>` : ''}</span></label>
     ${linea ? `<div class="cant">
       <input type="number" inputmode="decimal" step="any" min="0" placeholder="Cantidad" value="${esc(linea.cantidad)}" data-campo="cantidad" ${ro ? 'disabled' : ''}>
       <select data-campo="unidad" ${ro ? 'disabled' : ''}>${unidades}</select></div>` : ''}
@@ -297,12 +297,27 @@ $('btnOtraParcela').addEventListener('click', () => {
 $('formOtraParcela').addEventListener('submit', async e => {
   e.preventDefault();
   const ult = (await BD.leer('ultimosValores')) || {};
-  parte.lineas.push({
+  const linea = {
     id: uuid(), id_parcela: null, poligono: $('opPoligono').value.trim(), parcela: $('opParcela').value.trim(),
     paraje: $('opParaje').value.trim(), tipo_cultivo: $('opCultivo').value.trim(), superficie: null, sigpac: '',
-    cantidad: '', unidad: ult.unidad || 'Hectareas', observaciones: 'Parcela añadida a mano en el móvil'
-  });
+    cantidad: '', unidad: ult.unidad || 'Hectareas', observaciones: 'Parcela añadida a mano en el móvil',
+    lat: null, lon: null
+  };
+  parte.lineas.push(linea);
   cerrarDlg('dlgParcela'); pintarParcelas();
+  // Ubicación de ESTA parcela (el trabajador está dentro): la del parte si es reciente, si no una nueva
+  const g = parte.gps;
+  if (g && !g._viejo && Date.now() - new Date(g.fecha).getTime() < 120000) {
+    linea.lat = g.lat; linea.lon = g.lon; pintarParcelas();
+  } else if ('geolocation' in navigator) {
+    toast('📍 Tomando la ubicación de la parcela…');
+    navigator.geolocation.getCurrentPosition(pos => {
+      linea.lat = pos.coords.latitude; linea.lon = pos.coords.longitude;
+      if (!parte.gps) parte.gps = { lat: linea.lat, lon: linea.lon, precision: pos.coords.accuracy, fecha: new Date(pos.timestamp).toISOString() };
+      pintarParcelas(); pintarGps();
+      toast('📍 Ubicación de la parcela guardada');
+    }, () => toast('No se pudo tomar la ubicación de la parcela'), { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 });
+  }
 });
 
 // --- GPS ---
@@ -368,6 +383,7 @@ $('formParte').addEventListener('submit', async e => {
 
   pararGps();
   if (parte.gps) delete parte.gps._viejo;
+  for (const l of parte.lineas) if (l.id_parcela == null && l.lat == null && parte.gps) { l.lat = parte.gps.lat; l.lon = parte.gps.lon; }
   if (!parte.creado_movil) parte.creado_movil = new Date().toISOString();
   parte.estado = 'pendiente'; delete parte.error;
   await BD.guardarParte(parte);

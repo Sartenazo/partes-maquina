@@ -166,7 +166,8 @@
         poligono: l.poligono || '', parcela: l.parcela || '', paraje: l.paraje || '',
         tipo_cultivo: l.tipo_cultivo || '', superficie: l.superficie == null ? '' : l.superficie,
         sigpac: l.sigpac || '', cantidad: l.cantidad === '' || l.cantidad == null ? '' : l.cantidad,
-        unidad: l.unidad || '', observaciones: l.observaciones || ''
+        unidad: l.unidad || '', observaciones: l.observaciones || '',
+        lat: l.lat == null ? '' : l.lat, lon: l.lon == null ? '' : l.lon
       }))
     };
   }
