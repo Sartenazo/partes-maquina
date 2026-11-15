@@ -316,7 +316,7 @@ function pintarGps(buscando) {
   if (g) $('gpsMapa').href = `https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lon}`;
   $('btnGps').textContent = g ? '📍 Repetir ubicación' : '📍 Tomar ubicación';
 }
-function tomarGps() {
+function tomarGps(repitiendo) {
   if (!('geolocation' in navigator)) { $('gpsEstado').textContent = 'Este móvil no permite la ubicación.'; return; }
   pararGps();
   const inicio = Date.now();
@@ -329,7 +329,10 @@ function tomarGps() {
     }
     const terminado = c.accuracy <= 15 || Date.now() - inicio > 30000;
     pintarGps(!terminado);
-    if (terminado) pararGps();
+    if (terminado) {
+      pararGps();
+      if (repitiendo) toast('📍 Ubicación actualizada (±' + Math.round(parte.gps.precision) + ' m)');
+    }
   }, err => {
     pararGps();
     $('gpsEstado').textContent = err.code === 1
@@ -339,7 +342,7 @@ function tomarGps() {
   setTimeout(() => { if (gpsWatch !== null && Date.now() - inicio >= 30000) { pararGps(); pintarGps(); } }, 31000);
 }
 function pararGps() { if (gpsWatch !== null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; } }
-$('btnGps').addEventListener('click', () => { if (parte.gps) parte.gps._viejo = true; tomarGps(); });
+$('btnGps').addEventListener('click', () => { const rep = !!parte.gps; if (rep) parte.gps._viejo = true; tomarGps(rep); });
 
 // --- guardar / borrar ---
 $('formParte').addEventListener('submit', async e => {
