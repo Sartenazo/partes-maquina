@@ -88,7 +88,7 @@ $('btnDemo').addEventListener('click', async () => {
 
 // ---------- inicio ----------
 function irInicio() {
-  pararGps(); pararReloj();
+  pararGps(); pararReloj(); pararVigilancia();
   parte = null;
   mostrar('vInicio', 'Partes de Máquina', sesion.nombre);
   $('avisoDemo').classList.toggle('oculto', !sesion.demo);
@@ -147,9 +147,10 @@ $('btnNuevo').addEventListener('click', async () => {
 // ---------- tiempos ----------
 const hhmm = iso => iso ? new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '';
 const r2 = n => Math.round(n * 100) / 100;
-function horasLinea(l) {
+function horasReloj(l) {
   return (l.tramos || []).reduce((s, t) => s + ((t.fin ? new Date(t.fin) : new Date()) - new Date(t.inicio)) / 36e5, 0);
 }
+function horasLinea(l) { return l.horas_mano != null && l.horas_mano !== '' ? +l.horas_mano : horasReloj(l); }
 function duracion(h) {
   const m = Math.round(h * 60);
   return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : '');
@@ -200,7 +201,7 @@ function abrirParte(p) {
   $('btnBorrarParte').classList.toggle('oculto', nuevo || ro);
   $('ayudaParcelas').classList.toggle('oculto', ro || !enCurso());
   if (nuevo) tomarGps();
-  if (enCurso()) arrancarReloj();
+  if (enCurso()) { arrancarReloj(); if (lineaActiva()) vigilar(); }
 }
 function pintarAvisoCurso() {
   const a = $('avisoCurso');
@@ -313,14 +314,18 @@ function htmlParcela(p, linea) {
   const h = horasLinea(linea);
   return `<li data-clave="${esc(clave)}" class="marcada ${activa ? 'trabajando' : ''}">
     <div class="cab"><span class="txt"><b>${esc(nombreParcela(p))}</b><span>${info}</span>
-      ${linea.tramos.length ? `<span class="tiempos">⏱ ${esc(textoTramos(linea))} · ${duracion(h)}${linea.lat != null ? ' · 📍' : ''}</span>` : ''}
+      ${linea.tramos.length ? `<span class="tiempos">⏱ ${esc(textoTramos(linea))} · ${duracion(horasReloj(linea))}${linea.lat != null ? ' · 📍' : ''}</span>` : ''}
+      ${linea.horas_mano != null && linea.horas_mano !== '' ? `<span class="aviso-mano">✎ Horas puestas a mano: ${fmt(linea.horas_mano)} h</span>` : ''}
       ${manual ? `<span class="manual">AÑADIDA A MANO${linea.lat != null ? ' · SE BUSCARÁ EN EL CATASTRO' : ' · SIN UBICACIÓN'}</span>` : ''}</span></div>
     <div class="cant">
       <input type="number" inputmode="decimal" step="any" min="0" placeholder="${esHoras(linea.unidad) ? 'Horas' : 'Cantidad'}" value="${esc(linea.cantidad)}" data-campo="cantidad" ${ro ? 'disabled' : ''}>
       <select data-campo="unidad" ${ro ? 'disabled' : ''}>${unidades}</select></div>
     ${ro ? '' : `<div class="acciones">
       ${activa ? '' : `<button type="button" class="secundario" data-accion="empezar">▶ ${linea.tramos.length ? 'Volver aquí' : 'Empezar aquí'}</button>`}
-      <button type="button" class="quitar" data-accion="quitar" aria-label="Quitar parcela">✕</button></div>`}
+      <button type="button" class="lapiz" data-accion="horas">✎ Horas</button>
+      <button type="button" class="quitar" data-accion="quitar" aria-label="Quitar parcela">✕</button></div>
+    ${linea._editHoras ? `<div class="horas-mano"><input type="number" inputmode="decimal" step="0.25" min="0" placeholder="Horas reales (ej. 2,5)" value="${esc(linea.horas_mano == null ? '' : linea.horas_mano)}" data-campo="horas_mano">
+      <button type="button" class="mini" data-accion="horasok">Guardar</button></div>` : ''}`}
   </li>`;
 }
 function resumenParcelas() {
@@ -334,10 +339,12 @@ $('btnElegirParcela').addEventListener('click', () => {
 });
 
 // Empezar a trabajar en una parcela: cierra la anterior, abre un tramo nuevo y guarda el GPS
-async function empezarEn(clave) {
+async function empezarEn(clave, yaPreguntado) {
   if (!parte.id_empresa) return toast('Elige primero la empresa');
-  const ahora = new Date().toISOString();
   const act = lineaActiva();
+  if (act && claveLinea(act) === clave) return toast('Ya estás trabajando en esta parcela');
+  if (act && !yaPreguntado) return abrirTerminar({ luego: clave });   // primero terminar la anterior, con su hora
+  const ahora = new Date().toISOString();
   if (act) { const t = act.tramos[act.tramos.length - 1]; if (t && !t.fin) t.fin = ahora; }
   let l = parte.lineas.find(x => claveLinea(x) === clave);
   if (!l) {
@@ -358,6 +365,7 @@ async function empezarEn(clave) {
   window.scrollTo({ top: $('parcelaActiva').offsetTop - 80, behavior: 'smooth' });
   toast('▶ Empezado en ' + nombreParcela(l) + ' a las ' + hhmm(ahora));
   ubicarLinea(l);
+  vigilar();
   autoguardar(true);
 }
 // GPS de la parcela: la primera vez que se empieza en ella
@@ -369,13 +377,95 @@ function ubicarLinea(l) {
     if (parte && parte.lineas.includes(l)) { pintarParcelas(); pintarGps(); autoguardar(true); }
   }, () => toast('No se pudo tomar la ubicación de la parcela'), { enableHighAccuracy: true, timeout: 20000, maximumAge: 15000 });
 }
-function parar() {
-  const l = lineaActiva(); if (!l) return;
-  const t = l.tramos[l.tramos.length - 1]; if (t && !t.fin) t.fin = new Date().toISOString();
-  parte.activa = null;
+function parar() { abrirTerminar({}); }
+
+// ---------- terminar en una parcela (con la hora real) ----------
+let terOpc = null;
+function abrirTerminar(opc) {
+  const l = lineaActiva(); if (!l) { if (opc.luego) return empezarEn(opc.luego, true); return; }
+  terOpc = Object.assign({ linea: l }, opc);
+  const t = l.tramos[l.tramos.length - 1];
+  $('terTitulo').textContent = '✔ Terminar en ' + nombreParcela(l);
+  $('terTexto').innerHTML = (opc.texto ? opc.texto + '<br>' : '') +
+    'Entraste a las <b>' + hhmm(t.inicio) + '</b>.' + (opc.luego ? ' Después empezarás en la parcela nueva.' : '');
+  $('terHora').value = opc.hora ? hhmm(opc.hora) : hhmm(new Date().toISOString());
+  $('terError').classList.add('oculto');
+  $('terSigo').classList.toggle('oculto', !!opc.luego);
+  abrirDlg('dlgTerminar');
+}
+$('terCerrar').addEventListener('click', () => { cerrarDlg('dlgTerminar'); terOpc = null; });
+$('terSigo').addEventListener('click', () => {
+  if (terOpc && terOpc.gps) terOpc.linea._silencio = Date.now() + 15 * 60000;   // no volver a avisar en 15 min
+  cerrarDlg('dlgTerminar'); terOpc = null;
+});
+$('formTerminar').addEventListener('submit', e => {
+  e.preventDefault();
+  if (!terOpc) return cerrarDlg('dlgTerminar');
+  const l = terOpc.linea, t = l.tramos[l.tramos.length - 1];
+  const [hh, mm] = $('terHora').value.split(':').map(Number);
+  const fin = new Date(t.inicio); fin.setHours(hh, mm, 0, 0);
+  const err = msg => { $('terError').textContent = msg; $('terError').classList.remove('oculto'); };
+  if (isNaN(fin)) return err('Pon la hora.');
+  if (fin < new Date(t.inicio) && fin > new Date(new Date(t.inicio).getTime() - 60000)) fin.setTime(new Date(t.inicio).getTime()); // mismo minuto
+  if (fin < new Date(t.inicio)) return err('No puede ser antes de la hora de entrada (' + hhmm(t.inicio) + ').');
+  if (fin > new Date(Date.now() + 60000)) return err('No puede ser una hora que aún no ha llegado.');
+  t.fin = fin.toISOString();
+  parte.activa = null; l._fuera = 0; l._salida = null;
+  pararVigilancia();
+  cerrarDlg('dlgTerminar');
+  const o = terOpc; terOpc = null;
   recalcular(); pintarParcelas();
-  toast('⏸ Parado en ' + nombreParcela(l) + ' (' + duracion(horasLinea(l)) + ')');
+  toast('✔ Terminado en ' + nombreParcela(l) + ' a las ' + hhmm(t.fin) + ' (' + duracion(horasLinea(l)) + ')');
   autoguardar(true);
+  if (o.luego) empezarEn(o.luego, true);
+  if (o.despues) o.despues();
+});
+
+// ---------- aviso si se sale de la parcela (GPS) ----------
+const UMBRAL_M = 300;            // distancia al punto de entrada a partir de la cual se avisa
+let vigila = null, audioCtx = null;
+function distancia(a1, o1, a2, o2) {
+  const R = 6371000, r = x => x * Math.PI / 180;
+  const da = r(a2 - a1), dO = r(o2 - o1);
+  const h = Math.sin(da / 2) ** 2 + Math.cos(r(a1)) * Math.cos(r(a2)) * Math.sin(dO / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function vigilar() {
+  pararVigilancia();
+  if (!('geolocation' in navigator) || !lineaActiva()) return;
+  vigila = navigator.geolocation.watchPosition(pos => {
+    const l = parte && lineaActiva(); if (!l || l.lat == null) return;
+    const c = pos.coords; if (c.accuracy > 60) return;
+    const d = distancia(l.lat, l.lon, c.latitude, c.longitude);
+    if (d > UMBRAL_M) {
+      l._fuera = (l._fuera || 0) + 1;
+      if (!l._salida) l._salida = new Date(pos.timestamp).toISOString();
+      const silencio = l._silencio && Date.now() < l._silencio;
+      if (l._fuera >= 2 && !silencio && $('dlgTerminar').classList.contains('oculto')) {
+        avisar();
+        const ini = l.tramos[l.tramos.length - 1].inicio;
+        abrirTerminar({ gps: true, hora: (new Date(l._salida) > new Date(ini) ? l._salida : new Date().toISOString()),
+          texto: '📍 <b>Parece que has salido de esta parcela</b> (estás a ' + Math.round(d) + ' m). Si ya terminaste, comprueba la hora.' });
+      }
+    } else if (d < UMBRAL_M * 0.6) { l._fuera = 0; l._salida = null; }
+  }, () => {}, { enableHighAccuracy: true, maximumAge: 20000, timeout: 60000 });
+}
+function pararVigilancia() { if (vigila !== null) { navigator.geolocation.clearWatch(vigila); vigila = null; } }
+function prepararSonido() {
+  try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {}
+}
+document.addEventListener('click', prepararSonido, { passive: true });
+function avisar() {
+  try { navigator.vibrate && navigator.vibrate([400, 200, 400, 200, 400]); } catch (e) {}
+  try {
+    prepararSonido(); if (!audioCtx) return;
+    [0, 0.35, 0.7].forEach(tm => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = 880; o.type = 'square'; g.gain.value = 0.25;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(audioCtx.currentTime + tm); o.stop(audioCtx.currentTime + tm + 0.22);
+    });
+  } catch (e) {}
 }
 $('btnParar').addEventListener('click', parar);
 
@@ -383,18 +473,29 @@ $('listaParcelas').addEventListener('click', e => {
   const b = e.target.closest('button[data-accion]'); if (!b) return;
   const clave = b.closest('li[data-clave]').dataset.clave;
   if (b.dataset.accion === 'empezar') return empezarEn(clave);
+  if (b.dataset.accion === 'horas' || b.dataset.accion === 'horasok') {
+    const l = parte.lineas.find(x => claveLinea(x) === clave); if (!l) return;
+    if (b.dataset.accion === 'horasok') {
+      const v = b.closest('li').querySelector('[data-campo=horas_mano]').value;
+      l.horas_mano = v === '' ? null : num(v.replace(',', '.'));
+      l._editHoras = false;
+      toast(l.horas_mano == null ? 'Horas: se usan las del reloj' : '✎ Horas a mano guardadas: ' + fmt(l.horas_mano) + ' h');
+      recalcular(); autoguardar(true);
+    } else l._editHoras = !l._editHoras;
+    return pintarParcelas();
+  }
   if (b.dataset.accion === 'quitar') {
     const idx = parte.lineas.findIndex(l => claveLinea(l) === clave);
     if (idx < 0) return;
     const l = parte.lineas[idx];
     if (l.tramos.length && !confirm('¿Quitar ' + nombreParcela(l) + ' del parte? Se perderán sus horas.')) return;
-    if (parte.activa === l.id) parte.activa = null;
+    if (parte.activa === l.id) { parte.activa = null; pararVigilancia(); }
     parte.lineas.splice(idx, 1);
     recalcular(); pintarParcelas(); autoguardar(true);
   }
 });
 $('listaParcelas').addEventListener('change', e => {
-  const li = e.target.closest('li[data-clave]'); if (!li || !e.target.dataset.campo) return;
+  const li = e.target.closest('li[data-clave]'); if (!li || !e.target.dataset.campo || e.target.dataset.campo === 'horas_mano') return;
   const l = parte.lineas.find(x => claveLinea(x) === li.dataset.clave); if (!l) return;
   if (e.target.dataset.campo === 'unidad') {
     l.unidad = e.target.value;
@@ -477,7 +578,7 @@ function autoguardar(yaMismo) {
   clearTimeout(tAuto);
   tAuto = setTimeout(async () => {
     if (!parte) return;
-    const copia = JSON.parse(JSON.stringify(parte)); if (copia.gps) delete copia.gps._viejo;
+    const copia = JSON.parse(JSON.stringify(parte, (k, v) => (k === '_editHoras' ? undefined : v))); if (copia.gps) delete copia.gps._viejo;
     await BD.guardarParte(copia);
     if (copia.estado === 'en_curso' && navigator.onLine) Sync.guardarBorrador(copia).catch(() => {});
   }, yaMismo ? 0 : 800);
@@ -521,11 +622,10 @@ $('btnTerminar').addEventListener('click', async () => {
   if (faltan.length) { toast('Falta ' + faltan.join(', ')); return; }
   if (parte.fecha > hoy()) { toast('La fecha no puede ser posterior a hoy'); return; }
   if (!parte.lineas.length && !confirm('No has apuntado ninguna parcela. ¿Terminar igualmente?')) return;
-  if (enCurso() && !confirm('¿Terminar el parte y enviarlo a la oficina? Después ya no se podrá añadir más parcelas.')) return;
+  if (enCurso() && !lineaActiva() && !confirm('¿Terminar el parte y enviarlo a la oficina? Después ya no se podrá añadir más parcelas.')) return;
 
+  if (lineaActiva()) return abrirTerminar({ despues: () => $('btnTerminar').click() });   // hora de fin de la última parcela
   const ahora = new Date().toISOString();
-  const act = lineaActiva();
-  if (act) { const t = act.tramos[act.tramos.length - 1]; if (t && !t.fin) t.fin = ahora; }
   parte.activa = null;
   recalcular();
   if (parte.lineas.some(l => l.cantidad === '') && !confirm('Hay parcelas sin cantidad. ¿Enviar igualmente?')) return;

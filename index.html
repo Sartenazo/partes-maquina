@@ -96,7 +96,7 @@
       </div>
       <div id="parcelaActiva" class="activa oculto">
         <div><b id="activaNombre"></b><br><span id="activaTiempo"></span></div>
-        <button type="button" class="mini peligro-suave" id="btnParar">⏸ Parar</button>
+        <button type="button" class="mini terminar" id="btnParar">✔ Terminar aquí</button>
       </div>
       <ul id="listaParcelas" class="parcelas"></ul>
       <button type="button" class="principal" id="btnElegirParcela">▶ Elegir parcela y empezar</button>
@@ -152,6 +152,19 @@
     <label>Cultivo<input id="opCultivo"></label>
     <p class="nota">📍 <b>Ponte dentro de la parcela</b> antes de pulsar Añadir: se guarda tu ubicación y en la oficina se buscan en el <b>Catastro</b> el polígono, la parcela y el paraje. Si no sabes el polígono o la parcela, déjalos en blanco.</p>
     <button class="principal" type="submit">Añadir</button>
+  </form>
+</div>
+
+<!-- ===== TERMINAR EN UNA PARCELA ===== -->
+<div id="dlgTerminar" class="dialogo oculto" role="dialog" aria-modal="true">
+  <form class="dialogo-caja" id="formTerminar">
+    <div class="dialogo-cabecera"><strong id="terTitulo">Terminar en la parcela</strong>
+      <button type="button" class="icono" id="terCerrar" aria-label="Cerrar">✕</button></div>
+    <p id="terTexto" class="nota"></p>
+    <label>¿A qué hora terminaste?<input id="terHora" type="time" required></label>
+    <p id="terError" class="error oculto"></p>
+    <button class="principal" type="submit" id="terOk">✔ Terminar</button>
+    <button class="secundario" type="button" id="terSigo">Sigo en esta parcela</button>
   </form>
 </div>
 

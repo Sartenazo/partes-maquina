@@ -154,3 +154,14 @@ input, select, textarea { font-size: 16px; }
 
 .seleccionable li.otra { border-style: dashed; border-color: var(--verde); background: var(--verde-claro); }
 #btnElegirParcela { margin-top: 10px; }
+
+.activa .terminar { background: #1f4f8f; color: #fff; font-size: 15px; padding: 0 14px; }
+.parcelas .horas-mano { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; align-items: center; }
+.parcelas .horas-mano input { min-height: 44px; }
+.parcelas .aviso-mano { color: var(--naranja); font-weight: 700; font-size: 13px; display: block; }
+.parcelas .lapiz { flex: 0 0 auto; background: #fff; color: #1f4f8f; border-color: #1f4f8f; padding: 0 12px; }
+#dlgTerminar .dialogo-caja { border-top: 6px solid #1f4f8f; }
+.parcelas .acciones button { width: auto; }
+.parcelas .acciones .secundario { flex: 1 1 auto; }
+.parcelas .acciones .lapiz { flex: 0 0 auto; }
+.parcelas .acciones .quitar { flex: 0 0 52px; }

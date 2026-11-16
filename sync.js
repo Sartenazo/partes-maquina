@@ -200,8 +200,10 @@
         gps_precision_m: l.precision == null ? '' : l.precision,
         inicio: (l.tramos && l.tramos.length) ? l.tramos[0].inicio : '',
         fin: (l.tramos && l.tramos.length) ? (l.tramos[l.tramos.length - 1].fin || '') : '',
-        horas: (l.tramos && l.tramos.length) ? Math.round(l.tramos.reduce((s, t) => s + (new Date(t.fin || Date.now()) - new Date(t.inicio)) / 36e5, 0) * 100) / 100 : '',
-        tramos: (l.tramos || []).map(t => hm(t.inicio) + '-' + (t.fin ? hm(t.fin) : '')).join(', ')
+        horas: (l.horas_mano != null && l.horas_mano !== '') ? +l.horas_mano
+          : (l.tramos && l.tramos.length) ? Math.round(l.tramos.reduce((s, t) => s + (new Date(t.fin || Date.now()) - new Date(t.inicio)) / 36e5, 0) * 100) / 100 : '',
+        tramos: (l.tramos || []).map(t => hm(t.inicio) + '-' + (t.fin ? hm(t.fin) : '')).join(', ') +
+          ((l.horas_mano != null && l.horas_mano !== '') ? ' [horas corregidas a mano]' : '')
       }))
     };
   }
