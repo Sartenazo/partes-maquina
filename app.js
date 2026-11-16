@@ -321,6 +321,9 @@ function htmlParcela(p, linea) {
     <div class="cant">
       <input type="number" inputmode="decimal" step="any" min="0" placeholder="${esHoras(linea.unidad) ? 'Horas' : 'Cantidad'}" value="${esc(linea.cantidad)}" data-campo="cantidad" ${ro ? 'disabled' : ''}>
       <select data-campo="unidad" ${ro ? 'disabled' : ''}>${unidades}</select></div>
+    ${tieneMapa(linea) ? `<div class="mapas">
+      <button type="button" data-accion="mapaCat">🗺 Mapa Catastro</button>
+      <button type="button" data-accion="mapaGoogle">📍 Google Maps</button></div>` : ''}
     ${ro ? '' : `<div class="acciones">
       ${activa ? '' : `<button type="button" class="secundario" data-accion="empezar">▶ ${linea.tramos.length ? 'Volver aquí' : 'Empezar aquí'}</button>`}
       <button type="button" class="lapiz" data-accion="horas">✎ Horas</button>
@@ -476,6 +479,10 @@ $('btnParar').addEventListener('click', parar);
 $('listaParcelas').addEventListener('click', e => {
   const b = e.target.closest('button[data-accion]'); if (!b) return;
   const clave = b.closest('li[data-clave]').dataset.clave;
+  if (b.dataset.accion === 'mapaCat' || b.dataset.accion === 'mapaGoogle') {
+    const l = parte.lineas.find(x => claveLinea(x) === clave); if (l) abrirMapa(l, b.dataset.accion === 'mapaGoogle');
+    return;
+  }
   if (b.dataset.accion === 'empezar') return empezarEn(clave);
   if (b.dataset.accion === 'horas' || b.dataset.accion === 'horasok') {
     const l = parte.lineas.find(x => claveLinea(x) === clave); if (!l) return;
@@ -796,3 +803,44 @@ $('btnInstalar').addEventListener('click', async () => {
 });
 
 iniciar();
+
+// ---------- Ver la parcela en el mapa del Catastro o en Google Maps ----------
+function tieneMapa(l) { return !!(l && (l.catastro || l.sigpac || l.lat != null)); }
+// Referencia catastral de una línea: la del Catastro (GPS) o, si no, a partir de la SIGPAC (prov-mun-pol-parc)
+async function rcDeLinea(l) {
+  if (l.catastro && l.catastro.rc) return { rc: l.catastro.rc, cp: l.catastro.cp, cm: l.catastro.cm };
+  if (l._rc) return l._rc;
+  const p = String(l.sigpac || '').split(/[-:\s]+/).filter(Boolean).map(Number);
+  if (p.length < 4 || p.slice(0, 4).some(isNaN)) return null;
+  const [cp, cm, pol, parc] = p;
+  for (const q of [`CodigoMunicipio=${cm}&CodigoMunicipioINE=`, `CodigoMunicipio=&CodigoMunicipioINE=${cm}`]) {
+    const d = await pedirXML(`${OVC}OVCCallejeroCodigos.asmx/Consulta_DNPPP_Codigos?CodigoProvincia=${cp}&${q}&Poligono=${pol}&Parcela=${parc}`);
+    const rc = tx(d, 'pc1') + tx(d, 'pc2');
+    if (rc) return (l._rc = { rc, cp: tx(d, 'cp') || cp, cm: tx(d, 'cm') || cm });
+  }
+  return null;
+}
+async function abrirMapa(l, google) {
+  // la ventana se abre ya (si no, el móvil la bloquea) y luego se le pone la dirección
+  const w = window.open('', '_blank');
+  const ir = url => { if (w && !w.closed) w.location.href = url; else location.href = url; };
+  const cerrar = () => { try { if (w) w.close(); } catch (e) {} };
+  if (!navigator.onLine) {
+    if (google && l.lat != null) return ir(`https://www.google.com/maps/search/?api=1&query=${l.lat},${l.lon}`);
+    cerrar(); return toast('Sin conexión: el mapa se puede ver cuando haya cobertura');
+  }
+  toast('Buscando la parcela en el Catastro…', 2000);
+  const r = await rcDeLinea(l);
+  if (!google) {
+    if (r) return ir(`https://www1.sedecatastro.gob.es/Cartografia/mapa.aspx?refcat=${r.rc}&del=${+r.cp || ''}&mun=${+r.cm || ''}&final=&ZV=NO`);
+    cerrar(); return toast('No encuentro esta parcela en el Catastro');
+  }
+  let lat = null, lon = null;
+  if (r) {
+    const d = await pedirXML(`${OVC}OVCCoordenadas.asmx/Consulta_CPMRC?Provincia=&Municipio=&SRS=EPSG:4326&RC=${r.rc}`);
+    lat = tx(d, 'ycen'); lon = tx(d, 'xcen');
+  }
+  if (!lat && l.lat != null) { lat = l.lat; lon = l.lon; }       // si no, donde se tomó el GPS
+  if (!lat) { cerrar(); return toast('No tengo la ubicación de esta parcela'); }
+  ir(`https://www.google.com/maps/search/?api=1&query=${lat},${lon}`);
+}

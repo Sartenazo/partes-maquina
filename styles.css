@@ -165,3 +165,6 @@ input, select, textarea { font-size: 16px; }
 .parcelas .acciones .secundario { flex: 1 1 auto; }
 .parcelas .acciones .lapiz { flex: 0 0 auto; }
 .parcelas .acciones .quitar { flex: 0 0 52px; }
+
+.parcelas .mapas { display: flex; gap: 8px; margin-top: 8px; }
+.parcelas .mapas button { flex: 1 1 0; width: auto; margin: 0; min-height: 40px; font-size: 14px; background: #fff; color: #1f4f8f; border: 1.5px solid #1f4f8f; }
