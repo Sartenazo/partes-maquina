@@ -134,6 +134,35 @@
   </form>
 </main>
 
+<!-- ===== MIS HORAS ===== -->
+<main id="vHoras" class="vista oculto">
+  <div id="avisoHoras" class="aviso curso oculto"></div>
+  <div class="tarjeta">
+    <label>Fecha<input id="hFecha" type="date"></label>
+    <div class="fila dos">
+      <label>Entrada<input id="hEntrada" type="time"></label>
+      <label>Salida<input id="hSalida" type="time"></label>
+    </div>
+    <div class="fila dos">
+      <button type="button" class="secundario" id="hEntrarYa">▶ Entro ahora</button>
+      <button type="button" class="secundario" id="hSalirYa">■ Salgo ahora</button>
+    </div>
+    <label>Descanso (minutos)<input id="hDescanso" type="number" inputmode="numeric" min="0" step="5" placeholder="0"></label>
+    <div class="kilos"><span>Horas trabajadas</span><b id="hTotal">0 h</b></div>
+  </div>
+  <div class="tarjeta">
+    <label class="check"><input type="checkbox" id="hVacaciones"> Vacaciones</label>
+    <label class="check"><input type="checkbox" id="hBaja"> Baja médica</label>
+    <label>Observaciones<textarea id="hObs" rows="2" maxlength="200"></textarea></label>
+  </div>
+  <p id="horasError" class="error oculto"></p>
+  <div class="pie-fijo">
+    <button type="button" class="peligro oculto" id="hBorrar">Borrar</button>
+    <button type="button" class="secundario" id="hGuardar">Guardar</button>
+    <button type="button" class="principal" id="hEnviar">✔ Enviar</button>
+  </div>
+</main>
+
 <!-- ===== SELECTOR (lista con buscador) ===== -->
 <div id="dlgSelector" class="dialogo oculto" role="dialog" aria-modal="true">
   <div class="dialogo-caja">

@@ -176,3 +176,6 @@ input, select, textarea { font-size: 16px; }
 .tipos .tipo span { font-size: 32px; line-height: 1; }
 .tipos .tipo small { font-size: 12px; font-weight: 400; color: var(--gris); }
 .tipos .tipo.pronto { border-style: dashed; border-color: #c9c9c9; color: var(--gris); opacity: .75; }
+
+label.check { display: flex; align-items: center; gap: 10px; font-weight: 600; margin: 6px 0; }
+label.check input { width: 24px; height: 24px; min-height: 0; margin: 0; }

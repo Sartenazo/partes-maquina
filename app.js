@@ -11,7 +11,7 @@ const fmt = n => (n === '' || n == null) ? '' : (+n).toLocaleString('es-ES', { m
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() :
   'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
 
-let sesion = null, cat = null, parte = null, gpsWatch = null, instalarEvt = null;
+let sesion = null, cat = null, parte = null, horas = null, gpsWatch = null, instalarEvt = null;
 
 // ---------- tipos de parte ----------
 // unidad: unidad por defecto de cada parcela (null = la última usada) · kilos: texto del total
@@ -19,7 +19,7 @@ const TIPOS = {
   maquina:      { nombre: 'Trabajos con máquinas', corto: 'Máquina', icono: '🚜', maquina: true, unidad: null, kilos: 'Kilos transportados' }
   // (Vendimiadora y Cosechadora van como Trabajos con máquinas: se elige la máquina)
 };
-const PROXIMOS = [['🧪', 'Tratamientos'], ['🤝', 'Trabajos a terceros'], ['⏱', 'Mis horas']];
+const PROXIMOS = [['🧪', 'Tratamientos'], ['🤝', 'Trabajos a terceros']];
 const tipoDe = p => TIPOS[(p && p.tipo) || 'maquina'] || TIPOS.maquina;
 
 // ---------- utilidades de pantalla ----------
@@ -28,10 +28,10 @@ function toast(msg, ms = 2600) {
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add('oculto'), ms);
 }
 function mostrar(vista, titulo, sub) {
-  for (const v of ['vLogin', 'vInicio', 'vParte']) $(v).classList.toggle('oculto', v !== vista);
+  for (const v of ['vLogin', 'vInicio', 'vParte', 'vHoras']) $(v).classList.toggle('oculto', v !== vista);
   $('tituloPantalla').textContent = titulo || 'Partes de trabajo';
   $('subtitulo').textContent = sub || '';
-  $('btnAtras').classList.toggle('oculto', vista !== 'vParte');
+  $('btnAtras').classList.toggle('oculto', vista !== 'vParte' && vista !== 'vHoras');
   $('btnMenu').classList.toggle('oculto', vista !== 'vInicio');
   window.scrollTo(0, 0);
 }
@@ -98,7 +98,7 @@ $('btnDemo').addEventListener('click', async () => {
 // ---------- inicio ----------
 function irInicio() {
   pararGps(); pararReloj(); pararVigilancia();
-  parte = null;
+  parte = null; horas = null;
   mostrar('vInicio', 'Partes de trabajo', sesion.nombre);
   pintarTipos();
   $('avisoDemo').classList.toggle('oculto', !sesion.demo);
@@ -128,6 +128,7 @@ async function pintarInicio() {
 }
 
 function filaParte(p) {
+  if (p.tipo === 'horas') return filaHoras(p);
   const n = (p.lineas || []).length;
   const chip = p.estado === 'enviado' ? '<span class="chip enviado">Enviado</span>'
     : p.estado === 'error' ? '<span class="chip error">Error</span>'
@@ -140,15 +141,17 @@ function filaParte(p) {
 }
 ['listaCurso', 'listaPendientes', 'listaEnviados'].forEach(id => $(id).addEventListener('click', async e => {
   const li = e.target.closest('li[data-id]'); if (!li) return;
-  abrirParte(await BD.parte(li.dataset.id));
+  const p = await BD.parte(li.dataset.id);
+  if (p && p.tipo === 'horas') abrirHoras(p); else abrirParte(p);
 }));
 
 function pintarTipos() {
   $('tiposParte').innerHTML = Object.entries(TIPOS).map(([k, t]) =>
     `<button type="button" class="tipo" data-tipo="${k}"><span>${t.icono}</span>${esc(t.nombre)}</button>`).join('') +
+    `<button type="button" class="tipo" data-tipo="horas"><span>⏱</span>Mis horas</button>` +
     PROXIMOS.map(([i, n]) => `<button type="button" class="tipo pronto" disabled><span>${i}</span>${esc(n)}<small>Próximamente</small></button>`).join('');
 }
-$('tiposParte').addEventListener('click', e => { const b = e.target.closest('button[data-tipo]'); if (b) nuevoParte(b.dataset.tipo); });
+$('tiposParte').addEventListener('click', e => { const b = e.target.closest('button[data-tipo]'); if (!b) return; if (b.dataset.tipo === 'horas') nuevasHoras(); else nuevoParte(b.dataset.tipo); });
 async function nuevoParte(tipo) {
   const t = TIPOS[tipo];
   const curso = (await BD.partes()).filter(p => p.estado === 'en_curso' && ((p.tipo || 'maquina') === tipo));
@@ -771,6 +774,7 @@ $('btnBorrarParte').addEventListener('click', async () => {
   irInicio(); toast('Parte borrado');
 });
 $('btnAtras').addEventListener('click', async () => {
+  if (horas) return salirHoras();
   if (parte && parte.estado === 'nuevo' && (parte.id_empresa || parte.lineas.length) &&
       !confirm('Este parte aún no está guardado. ¿Salir sin guardar?')) return;
   if (parte && !soloLectura() && parte.estado !== 'nuevo') { leerFormulario(); await BD.guardarParte(parte); }
@@ -875,4 +879,130 @@ async function abrirMapa(l, google) {
   if (!lat && l.lat != null) { lat = l.lat; lon = l.lon; }       // si no, donde se tomó el GPS
   if (!lat) { cerrar(); return toast('No tengo la ubicación de esta parcela'); }
   ir(`https://www.google.com/maps/search/?api=1&query=${lat},${lon}`);
+}
+
+// =====================================================================
+//  MIS HORAS (control de trabajadores -> tabla Diario de Access)
+// =====================================================================
+const aMin = t => { if (!t) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+function calcHoras(h) {
+  if (h.vacaciones || h.baja_medica) return 0;
+  const e = aMin(h.hora_entrada), s = aMin(h.hora_salida);
+  if (e == null || s == null) return '';
+  let m = s - e; if (m < 0) m += 1440;                       // salida después de medianoche
+  m -= (+h.descanso_min || 0);
+  return Math.max(0, Math.round(m / 60 * 100) / 100);
+}
+function filaHoras(h) {
+  const chip = h.estado === 'enviado' ? '<span class="chip enviado">Enviado</span>'
+    : h.estado === 'error' ? '<span class="chip error">Error</span>'
+    : h.estado === 'en_curso' ? '<span class="chip curso">En curso</span>' : '<span class="chip pendiente">Pendiente</span>';
+  const det = h.vacaciones ? 'Vacaciones' : h.baja_medica ? 'Baja médica'
+    : (h.hora_entrada || '?') + '–' + (h.hora_salida || 'ahora') + (h.horas !== '' && h.horas != null && h.hora_salida ? ' · ' + duracion(+h.horas) : '');
+  return `<li data-id="${esc(h.id)}"><div class="txt"><b>⏱ ${esc(fechaES(h.fecha))} · Mis horas</b><span>${esc(det)}</span></div>${chip}</li>`;
+}
+async function nuevasHoras() {
+  const mias = (await BD.partes()).filter(p => p.tipo === 'horas' && p.fecha === hoy());
+  const abierta = mias.find(p => p.estado !== 'enviado');
+  if (abierta) return abrirHoras(abierta);
+  if (mias.length && !confirm('Ya enviaste tus horas de hoy. ¿Apuntar otra jornada?')) return;
+  abrirHoras({ id: uuid(), tipo: 'horas', estado: 'nuevo', fecha: hoy(), hora_entrada: '', hora_salida: '',
+    descanso_min: '', horas: '', vacaciones: false, baja_medica: false, observaciones: '', gps: null, creado_movil: null });
+}
+function abrirHoras(h) {
+  horas = JSON.parse(JSON.stringify(h)); parte = null;
+  const ro = horas.estado === 'enviado';
+  mostrar('vHoras', horas.estado === 'nuevo' ? 'Mis horas' : ro ? 'Horas enviadas' : 'Mis horas', fechaES(horas.fecha));
+  $('hFecha').value = horas.fecha; $('hEntrada').value = horas.hora_entrada || ''; $('hSalida').value = horas.hora_salida || '';
+  $('hDescanso').value = horas.descanso_min === '' || horas.descanso_min == null ? '' : horas.descanso_min;
+  $('hVacaciones').checked = !!horas.vacaciones; $('hBaja').checked = !!horas.baja_medica;
+  $('hObs').value = horas.observaciones || '';
+  $('vHoras').querySelectorAll('input, textarea, button').forEach(el => { el.disabled = ro; });
+  ['hGuardar', 'hEnviar'].forEach(id => $(id).classList.toggle('oculto', ro));
+  $('hBorrar').classList.toggle('oculto', ro || horas.estado === 'nuevo');
+  $('horasError').textContent = horas.estado === 'error' ? 'No se pudo enviar: ' + (horas.error || '') : '';
+  $('horasError').classList.toggle('oculto', horas.estado !== 'error');
+  pintarHoras();
+}
+function leerHoras() {
+  horas.fecha = $('hFecha').value; horas.hora_entrada = $('hEntrada').value; horas.hora_salida = $('hSalida').value;
+  horas.descanso_min = $('hDescanso').value === '' ? '' : Math.max(0, parseInt($('hDescanso').value, 10) || 0);
+  horas.vacaciones = $('hVacaciones').checked; horas.baja_medica = $('hBaja').checked;
+  horas.observaciones = $('hObs').value.trim();
+  horas.horas = calcHoras(horas);
+}
+function pintarHoras() {
+  leerHoras();
+  const ausente = horas.vacaciones || horas.baja_medica;
+  ['hEntrada', 'hSalida', 'hDescanso', 'hEntrarYa', 'hSalirYa'].forEach(id => { if (horas.estado !== 'enviado') $(id).disabled = ausente; });
+  $('hTotal').textContent = ausente ? (horas.vacaciones ? 'Vacaciones' : 'Baja médica')
+    : horas.horas === '' ? (horas.hora_entrada ? 'desde las ' + horas.hora_entrada : '—') : duracion(horas.horas);
+  const a = $('avisoHoras');
+  if (horas.estado === 'en_curso' && horas.hora_entrada && !horas.hora_salida) {
+    a.className = 'aviso curso'; a.textContent = 'JORNADA EN CURSO · al terminar pulsa "Salgo ahora" y después "Enviar"';
+  } else a.className = 'aviso oculto';
+}
+async function guardarHorasLocal() {
+  if (horas.estado === 'nuevo') { horas.estado = 'en_curso'; horas.creado_movil = new Date().toISOString(); }
+  if (horas.estado === 'error') horas.estado = 'pendiente';
+  await BD.guardarParte(horas);
+  if (horas.estado === 'en_curso' && navigator.onLine) Sync.guardarBorrador(horas).catch(() => {});
+}
+function gpsUnaVez() {
+  if (!('geolocation' in navigator) || !horas) return;
+  const h = horas;
+  navigator.geolocation.getCurrentPosition(pos => {
+    h.gps = { lat: pos.coords.latitude, lon: pos.coords.longitude, precision: pos.coords.accuracy, fecha: new Date(pos.timestamp).toISOString() };
+    if (horas === h) BD.guardarParte(h).catch(() => {});
+  }, () => {}, { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
+}
+['hFecha', 'hEntrada', 'hSalida', 'hDescanso', 'hVacaciones', 'hBaja'].forEach(id => $(id).addEventListener('change', () => {
+  if (id === 'hVacaciones' && $('hVacaciones').checked) $('hBaja').checked = false;
+  if (id === 'hBaja' && $('hBaja').checked) $('hVacaciones').checked = false;
+  pintarHoras(); if (horas.estado !== 'nuevo') guardarHorasLocal();
+}));
+$('hDescanso').addEventListener('input', pintarHoras);
+$('hEntrarYa').addEventListener('click', async () => {
+  if ($('hEntrada').value && !confirm('Ya tienes hora de entrada (' + $('hEntrada').value + '). ¿Cambiarla por la hora actual?')) return;
+  $('hEntrada').value = horaAhora(); pintarHoras(); await guardarHorasLocal(); gpsUnaVez();
+  toast('▶ Entrada apuntada a las ' + horas.hora_entrada);
+});
+$('hSalirYa').addEventListener('click', async () => {
+  if (!$('hEntrada').value) return toast('Primero apunta la hora de entrada');
+  $('hSalida').value = horaAhora(); pintarHoras(); await guardarHorasLocal();
+  toast('■ Salida apuntada a las ' + horas.hora_salida + ' · ' + duracion(+horas.horas || 0));
+});
+$('hGuardar').addEventListener('click', async () => {
+  leerHoras();
+  if (horas.estado === 'nuevo' && !horas.hora_entrada && !horas.vacaciones && !horas.baja_medica) { irInicio(); return; }
+  await guardarHorasLocal(); irInicio(); toast('Guardado. Envíalo cuando termines la jornada.');
+});
+$('hEnviar').addEventListener('click', async () => {
+  leerHoras();
+  if (!horas.fecha) return toast('Falta la fecha');
+  if (horas.fecha > hoy()) return toast('La fecha no puede ser posterior a hoy');
+  if (!horas.vacaciones && !horas.baja_medica) {
+    if (!horas.hora_entrada || !horas.hora_salida) return toast('Falta la hora de entrada o la de salida');
+    if (!(horas.horas > 0)) return toast('Las horas trabajadas salen a 0. Revisa las horas y el descanso.');
+    if (horas.horas > 16 && !confirm('Salen ' + duracion(horas.horas) + '. ¿Es correcto?')) return;
+  }
+  const otras = (await BD.partes()).filter(p => p.tipo === 'horas' && p.fecha === horas.fecha && p.id !== horas.id);
+  if (otras.length && !confirm('Ya tienes otra jornada apuntada el ' + fechaES(horas.fecha) + '. ¿Enviar también esta?')) return;
+  if (!horas.creado_movil) horas.creado_movil = new Date().toISOString();
+  horas.estado = 'pendiente'; delete horas.error;
+  await BD.guardarParte(horas);
+  irInicio();
+  toast(navigator.onLine ? 'Horas terminadas. Enviando…' : 'Horas guardadas. Se enviarán al tener cobertura.');
+  pedirEnvioSegundoPlano(); enviar();
+});
+$('hBorrar').addEventListener('click', async () => {
+  if (!confirm('¿Borrar estas horas? Aún no se han enviado a la oficina.')) return;
+  const id = horas.id; await BD.borrarParte(id);
+  if (navigator.onLine) Sync.borrarBorrador(id).catch(() => {});
+  irInicio(); toast('Horas borradas');
+});
+async function salirHoras() {
+  if (horas.estado === 'nuevo') { leerHoras(); if ((horas.hora_entrada || horas.vacaciones || horas.baja_medica) && !confirm('No has guardado. ¿Salir sin guardar?')) return; }
+  else if (horas.estado !== 'enviado') { leerHoras(); await BD.guardarParte(horas); }
+  irInicio();
 }

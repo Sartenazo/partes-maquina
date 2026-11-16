@@ -158,8 +158,9 @@
               if (g.navigator && g.navigator.onLine === false) throw new TypeError('offline');
               await new Promise(r => setTimeout(r, 400));
             } else {
-              await conToken(tk => peticion('/rest/v1/rpc/registrar_parte', {
-                metodo: 'POST', token: tk, cuerpo: { p: aEnvio(p) }
+              const horas = p.tipo === 'horas';
+              await conToken(tk => peticion('/rest/v1/rpc/' + (horas ? 'registrar_horas' : 'registrar_parte'), {
+                metodo: 'POST', token: tk, cuerpo: { p: horas ? aEnvioHoras(p) : aEnvio(p) }
               }));
             }
             p.estado = 'enviado'; p.enviado = new Date().toISOString(); delete p.error;
@@ -180,6 +181,16 @@
   };
 
   const hm = iso => { const d = new Date(iso); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+
+  function aEnvioHoras(h) {
+    return {
+      id: h.id, fecha: h.fecha, hora_entrada: h.hora_entrada || '', hora_salida: h.hora_salida || '',
+      descanso_min: h.descanso_min === '' || h.descanso_min == null ? '' : h.descanso_min,
+      horas: h.horas === '' || h.horas == null ? '' : h.horas,
+      vacaciones: !!h.vacaciones, baja_medica: !!h.baja_medica, observaciones: h.observaciones || '',
+      lat: h.gps ? h.gps.lat : '', lon: h.gps ? h.gps.lon : '', creado_movil: h.creado_movil
+    };
+  }
 
   // Lo que viaja a la nube (sin campos internos de la app)
   function aEnvio(p) {
