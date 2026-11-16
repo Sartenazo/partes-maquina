@@ -545,7 +545,7 @@ async function pedirXML(url) {
   catch (e) { return null; } finally { clearTimeout(t); }
 }
 const tx = (doc, tag) => { const e = doc && doc.getElementsByTagName(tag)[0]; return e ? e.textContent.trim() : ''; };
-const capital = s => (s || '').toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+const capital = s => (s || '').toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()).replace(/ (De|La|Las|Los|Del|Y|El) /g, m => m.toLowerCase());
 // Coordenadas -> polígono, parcela, paraje, municipio, cultivo y superficie (ha)
 async function consultarCatastro(lat, lon) {
   if (!navigator.onLine || lat == null) return null;
