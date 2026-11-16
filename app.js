@@ -92,6 +92,7 @@ function irInicio() {
   mostrar('vInicio', 'Partes de Máquina', sesion.nombre);
   $('avisoDemo').classList.toggle('oculto', !sesion.demo);
   pintarInicio();
+  pintarAyudaIOS();
 }
 
 async function pintarInicio() {
@@ -452,6 +453,13 @@ $('btnSalir').addEventListener('click', async () => {
 });
 
 // ---------- instalar como app ----------
+const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const instalada = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+async function pintarAyudaIOS() {
+  const vista = (await BD.leer('ayudaIOSvista')) === true;
+  $('ayudaIOS').classList.toggle('oculto', !(esIOS && !instalada && !vista));
+}
+$('btnOcultarIOS').addEventListener('click', async () => { await BD.guardar('ayudaIOSvista', true); pintarAyudaIOS(); });
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instalarEvt = e; $('btnInstalar').classList.remove('oculto'); });
 $('btnInstalar').addEventListener('click', async () => {
   if (!instalarEvt) return;

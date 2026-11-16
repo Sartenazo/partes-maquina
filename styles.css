@@ -126,3 +126,9 @@ button:disabled { opacity: .55; }
   background: #1d1d1b; color: #fff; padding: 12px 18px; border-radius: 24px; z-index: 30;
   font-size: 15px; max-width: 90vw; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,.25);
 }
+
+.ios ol { margin: 8px 0 4px 20px; padding: 0; }
+.ios li { margin: 4px 0; }
+.ico-ios { display: inline-block; border: 1.5px solid var(--verde); border-radius: 6px; padding: 0 5px; color: var(--verde); }
+/* iPhone: que Safari no amplíe al tocar un campo (necesita letra ≥ 16px) */
+input, select, textarea { font-size: 16px; }

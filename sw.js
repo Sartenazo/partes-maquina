@@ -1,7 +1,7 @@
 // Service worker: la app funciona sin conexión y envía partes en segundo plano.
-const VERSION = 'partes-maquina-v3';
+const VERSION = 'partes-maquina-v4';
 const ARCHIVOS = ['./', 'index.html', 'styles.css', 'config.js', 'db.js', 'sync.js', 'demo.js', 'app.js',
-  'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+  'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 importScripts('config.js', 'db.js', 'sync.js');
 

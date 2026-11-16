@@ -7,7 +7,12 @@
 <title>Partes de Máquina</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Partes">
+<meta name="format-detection" content="telephone=no">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -46,6 +51,16 @@
   <button class="principal grande" id="btnNuevo">＋ Nuevo parte de máquina</button>
   <div id="estadoEnvio" class="estado-envio"></div>
   <button id="btnInstalar" class="secundario oculto">📲 Instalar la app en el móvil</button>
+  <div id="ayudaIOS" class="tarjeta ios oculto">
+    <b>📲 Instalar en el iPhone</b>
+    <ol>
+      <li>Abre esta página en <b>Safari</b>.</li>
+      <li>Pulsa el botón <b>Compartir</b> <span class="ico-ios">⬆︎</span> (abajo en el centro, o arriba a la derecha en iPad).</li>
+      <li>Elige <b>"Añadir a pantalla de inicio"</b> y pulsa <b>Añadir</b>.</li>
+    </ol>
+    <p class="nota">Después abre la app siempre desde el icono del tractor. Así guarda los partes sin cobertura y no se borran.</p>
+    <button class="secundario" id="btnOcultarIOS" type="button">Entendido</button>
+  </div>
   <section>
     <h3 id="tPendientes">Pendientes de enviar</h3>
     <ul id="listaPendientes" class="lista"></ul>
