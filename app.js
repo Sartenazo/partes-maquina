@@ -16,8 +16,9 @@ let sesion = null, cat = null, parte = null, horas = null, gpsWatch = null, inst
 // ---------- tipos de parte ----------
 // unidad: unidad por defecto de cada parcela (null = la última usada) · kilos: texto del total
 const TIPOS = {
-  maquina:      { nombre: 'Trabajos con máquinas', corto: 'Máquina', icono: '🚜', maquina: true, unidad: null, kilos: 'Kilos transportados' }
-  // (Vendimiadora y Cosechadora van como Trabajos con máquinas: se elige la máquina)
+  maquina:      { nombre: 'Trabajos con máquinas', corto: 'Máquina', icono: '🚜', maquina: true, unidad: null, kilos: 'Kilos transportados' },
+  vendimiadora: { nombre: 'Vendimiadora', corto: 'Vendimiadora', icono: '🍇', unidad: 'Kilos', kilos: 'Kilos vendimiados' },
+  cosechadora:  { nombre: 'Cosechadora', corto: 'Cosechadora', icono: '🌾', cereal: true, unidad: 'Kilos', kilos: 'Kilos cosechados' }
 };
 const PROXIMOS = [['🧪', 'Tratamientos'], ['🤝', 'Trabajos a terceros']];
 const tipoDe = p => TIPOS[(p && p.tipo) || 'maquina'] || TIPOS.maquina;
