@@ -183,7 +183,6 @@ function abrirParte(p) {
     nuevo ? 'Máquina' : fechaES(parte.fecha) + ' · ' + (parte.empresa || ''));
   $('pFecha').value = parte.fecha;
   $('pObs').value = parte.observaciones || '';
-  $('buscarParcela').value = '';
   pintarSelector('pEmpresa', parte.empresa, 'Elegir empresa…');
   pintarSelector('pClase', parte.clase, 'Elegir máquina…');
   pintarSelector('pFaena', parte.faena, 'Elegir tipo de trabajo…');
@@ -199,7 +198,6 @@ function abrirParte(p) {
   $('btnTerminar').classList.toggle('oculto', ro);
   $('btnTerminar').textContent = enCurso() ? '✔ Terminar y enviar' : '⇪ Enviar';
   $('btnBorrarParte').classList.toggle('oculto', nuevo || ro);
-  $('btnOtraParcela').classList.toggle('oculto', ro);
   $('ayudaParcelas').classList.toggle('oculto', ro || !enCurso());
   if (nuevo) tomarGps();
   if (enCurso()) arrancarReloj();
@@ -224,14 +222,24 @@ document.querySelectorAll('.selector').forEach(b => b.addEventListener('click', 
 
 function abrirSelector(lista) {
   selActual = lista;
-  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina' }[lista];
+  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
   $('selBuscar').value = '';
   pintarSel();
   abrirDlg('dlgSelector');
-  if ((cat[lista] || []).length > 8) setTimeout(() => $('selBuscar').focus(), 50);
+  if ((lista === 'parcelas' ? parcelasEmpresa() : (cat[lista] || [])).length > 8) setTimeout(() => $('selBuscar').focus(), 50);
 }
 function pintarSel() {
   const q = normal($('selBuscar').value);
+  if (selActual === 'parcelas') {
+    const apunt = new Set(parte.lineas.map(claveLinea));
+    const items = parcelasEmpresa().filter(p => !q || normal(`${p.poligono} ${p.parcela} ${p.paraje} ${p.tipo_cultivo} pol ${p.poligono} parc ${p.parcela}`).includes(q));
+    $('selLista').innerHTML = items.map(p =>
+      `<li data-id="${p.id_parcela}" class="${apunt.has(String(p.id_parcela)) ? 'marcado' : ''}"><div class="txt"><b>${esc(nombreParcela(p))}</b>
+        <span>${esc(p.paraje || '')}${p.tipo_cultivo ? ' · ' + esc(p.tipo_cultivo) : ''}${p.superficie ? ' · ' + fmt(p.superficie) + ' ha' : ''}${apunt.has(String(p.id_parcela)) ? ' · ya apuntada' : ''}</span></div></li>`
+    ).join('') + (items.length ? '' : '<li class="vacio">Ninguna parcela coincide con la búsqueda</li>') +
+      `<li data-id="__otra" class="otra"><div class="txt"><b>📍 No está en la lista</b><span>Se guarda el GPS y en la oficina se busca en el Catastro</span></div></li>`;
+    return;
+  }
   const actual = { empresas: parte.empresa, faenas: parte.faena, clases: parte.clase }[selActual];
   const items = (cat[selActual] || []).filter(x => !q || normal(x.nombre + ' ' + (x.cif || '')).includes(q));
   $('selLista').innerHTML = items.length ? items.map(x =>
@@ -242,6 +250,11 @@ $('selBuscar').addEventListener('input', pintarSel);
 $('selCerrar').addEventListener('click', () => cerrarDlg('dlgSelector'));
 $('selLista').addEventListener('click', e => {
   const li = e.target.closest('li[data-id]'); if (!li) return;
+  if (selActual === 'parcelas') {
+    cerrarDlg('dlgSelector');
+    if (li.dataset.id === '__otra') { $('formOtraParcela').reset(); abrirDlg('dlgParcela'); return; }
+    return empezarEn(li.dataset.id);
+  }
   const x = cat[selActual].find(i => String(i.id) === li.dataset.id);
   if (selActual === 'empresas') {
     if (parte.id_empresa !== x.id && parte.lineas.length &&
@@ -278,25 +291,16 @@ function pintarActiva() {
 
 function pintarParcelas() {
   const ul = $('listaParcelas');
-  pintarActiva();
-  if (!parte.id_empresa) {
-    ul.innerHTML = '<li class="nota">Elige primero la empresa.</li>';
-    $('buscarParcela').classList.add('oculto'); $('resumenParcelas').textContent = ''; return;
-  }
   const ro = soloLectura();
-  const q = normal($('buscarParcela').value);
-  const deCat = parcelasEmpresa();
-  $('buscarParcela').classList.toggle('oculto', ro || deCat.length < 6);
-  const apuntadas = new Map(parte.lineas.map(l => [claveLinea(l), l]));
-  const filas = [];
-  // primero las parcelas ya apuntadas (en el orden en que se trabajaron), luego el resto
-  for (const l of parte.lineas) filas.push(htmlParcela(l, l));
-  if (!ro) for (const p of deCat) {
-    if (apuntadas.has(String(p.id_parcela))) continue;
-    if (q && !normal(`${p.poligono} ${p.parcela} ${p.paraje} ${p.tipo_cultivo}`).includes(q)) continue;
-    filas.push(htmlParcela(p, null));
+  pintarActiva();
+  $('btnElegirParcela').classList.toggle('oculto', ro);
+  $('btnElegirParcela').textContent = parte.lineas.length ? '▶ Empezar en otra parcela' : '▶ Elegir parcela y empezar';
+  if (!parte.id_empresa) {
+    ul.innerHTML = ro ? '' : '<li class="nota">Elige primero la empresa.</li>';
+    $('resumenParcelas').textContent = ''; return;
   }
-  ul.innerHTML = filas.join('') || '<li class="nota">Esta empresa no tiene parcelas en la lista. Usa el botón de abajo.</li>';
+  ul.innerHTML = parte.lineas.map(l => htmlParcela(l, l)).join('') ||
+    (ro ? '<li class="nota">Sin parcelas.</li>' : '');
   resumenParcelas();
 }
 function htmlParcela(p, linea) {
@@ -305,10 +309,6 @@ function htmlParcela(p, linea) {
   const manual = linea && linea.id_parcela == null;
   const activa = linea && linea.id === parte.activa;
   const info = `${esc(p.paraje || '')}${p.tipo_cultivo ? ' · ' + esc(p.tipo_cultivo) : ''}${p.superficie ? ' · ' + fmt(p.superficie) + ' ha' : ''}`;
-  if (!linea) {
-    return `<li data-clave="${esc(clave)}"><div class="cab"><span class="txt"><b>${esc(nombreParcela(p))}</b><span>${info}</span></span></div>
-      <div class="acciones"><button type="button" class="empezar" data-accion="empezar">▶ Empezar aquí</button></div></li>`;
-  }
   const unidades = cat.unidades.map(u => `<option ${linea.unidad === u.nombre ? 'selected' : ''}>${esc(u.nombre)}</option>`).join('');
   const h = horasLinea(linea);
   return `<li data-clave="${esc(clave)}" class="marcada ${activa ? 'trabajando' : ''}">
@@ -328,7 +328,10 @@ function resumenParcelas() {
   const h = parte.lineas.reduce((s, l) => s + horasLinea(l), 0);
   $('resumenParcelas').textContent = n ? `${n} parcela${n === 1 ? '' : 's'}${h ? ' · ' + duracion(h) : ''}` : '';
 }
-$('buscarParcela').addEventListener('input', pintarParcelas);
+$('btnElegirParcela').addEventListener('click', () => {
+  if (!parte.id_empresa) return toast('Elige primero la empresa');
+  abrirSelector('parcelas');
+});
 
 // Empezar a trabajar en una parcela: cierra la anterior, abre un tramo nuevo y guarda el GPS
 async function empezarEn(clave) {
@@ -411,10 +414,6 @@ $('listaParcelas').addEventListener('input', e => {
   if (l) { l.cantidad = num(e.target.value); if (esHoras(l.unidad)) l.cantidad_auto = false; recalcular(); }
 });
 
-$('btnOtraParcela').addEventListener('click', () => {
-  if (!parte.id_empresa) return toast('Elige primero la empresa');
-  $('formOtraParcela').reset(); abrirDlg('dlgParcela');
-});
 $('formOtraParcela').addEventListener('submit', async e => {
   e.preventDefault();
   const ult = (await BD.leer('ultimosValores')) || {};

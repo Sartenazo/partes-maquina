@@ -151,3 +151,6 @@ input, select, textarea { font-size: 16px; }
 .kilos { display: flex; justify-content: space-between; align-items: baseline; font-size: 18px; }
 .kilos b { font-size: 22px; color: var(--verde); }
 .pie-fijo .secundario { flex: 0 0 30%; margin: 0; }
+
+.seleccionable li.otra { border-style: dashed; border-color: var(--verde); background: var(--verde-claro); }
+#btnElegirParcela { margin-top: 10px; }
