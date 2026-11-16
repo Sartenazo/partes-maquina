@@ -316,7 +316,8 @@ function htmlParcela(p, linea) {
     <div class="cab"><span class="txt"><b>${esc(nombreParcela(p))}</b><span>${info}</span>
       ${linea.tramos.length ? `<span class="tiempos">⏱ ${esc(textoTramos(linea))} · ${duracion(horasReloj(linea))}${linea.lat != null ? ' · 📍' : ''}</span>` : ''}
       ${linea.horas_mano != null && linea.horas_mano !== '' ? `<span class="aviso-mano">✎ Horas puestas a mano: ${fmt(linea.horas_mano)} h</span>` : ''}
-      ${manual ? `<span class="manual">AÑADIDA A MANO${linea.lat != null ? ' · SE BUSCARÁ EN EL CATASTRO' : ' · SIN UBICACIÓN'}</span>` : ''}</span></div>
+      ${manual ? `<span class="manual">AÑADIDA A MANO · ${linea.catastro ? '📍 DATOS DEL CATASTRO' + (linea.catastro.municipio ? ' (' + esc(linea.catastro.municipio) + ')' : '') : linea.lat != null ? 'SE BUSCARÁ EN EL CATASTRO' : 'SIN UBICACIÓN'}</span>` : ''}
+      ${linea.aviso_catastro ? `<span class="aviso-mano">⚠ ${esc(linea.aviso_catastro)}</span>` : ''}</span></div>
     <div class="cant">
       <input type="number" inputmode="decimal" step="any" min="0" placeholder="${esHoras(linea.unidad) ? 'Horas' : 'Cantidad'}" value="${esc(linea.cantidad)}" data-campo="cantidad" ${ro ? 'disabled' : ''}>
       <select data-campo="unidad" ${ro ? 'disabled' : ''}>${unidades}</select></div>
@@ -374,7 +375,10 @@ function ubicarLinea(l) {
   navigator.geolocation.getCurrentPosition(pos => {
     l.lat = pos.coords.latitude; l.lon = pos.coords.longitude; l.precision = pos.coords.accuracy;
     if (!parte.gps) parte.gps = { lat: l.lat, lon: l.lon, precision: l.precision, fecha: new Date(pos.timestamp).toISOString() };
-    if (parte && parte.lineas.includes(l)) { pintarParcelas(); pintarGps(); autoguardar(true); }
+    if (parte && parte.lineas.includes(l)) {
+      pintarParcelas(); pintarGps(); autoguardar(true);
+      if (l.id_parcela == null) completarConCatastro(l, true); else comprobarCatastro(l);
+    }
   }, () => toast('No se pudo tomar la ubicación de la parcela'), { enableHighAccuracy: true, timeout: 20000, maximumAge: 15000 });
 }
 function parar() { abrirTerminar({}); }
@@ -531,6 +535,76 @@ $('formOtraParcela').addEventListener('submit', async e => {
 $('pObs').addEventListener('change', () => { parte.observaciones = $('pObs').value.trim(); autoguardar(); });
 $('pFecha').addEventListener('change', () => { parte.fecha = $('pFecha').value; pintarAvisoCurso(); autoguardar(); });
 
+
+// ---------- Catastro (Sede Electrónica del Catastro, servicio público) ----------
+const OVC = 'https://ovc.catastro.meh.es/ovcservweb/OVCSWLocalizacionRC/';
+async function pedirXML(url) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 12000);
+  try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) return null;
+        return new DOMParser().parseFromString(await r.text(), 'text/xml'); }
+  catch (e) { return null; } finally { clearTimeout(t); }
+}
+const tx = (doc, tag) => { const e = doc && doc.getElementsByTagName(tag)[0]; return e ? e.textContent.trim() : ''; };
+const capital = s => (s || '').toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+// Coordenadas -> polígono, parcela, paraje, municipio, cultivo y superficie (ha)
+async function consultarCatastro(lat, lon) {
+  if (!navigator.onLine || lat == null) return null;
+  const d1 = await pedirXML(`${OVC}OVCCoordenadas.asmx/Consulta_RCCOOR?SRS=EPSG:4326&Coordenada_X=${lon}&Coordenada_Y=${lat}`);
+  const rc = tx(d1, 'pc1') + tx(d1, 'pc2'); if (!rc) return null;
+  const r = { rc, ldt: tx(d1, 'ldt'), poligono: '', parcela: '', paraje: '', municipio: '', cultivo: '', superficie: null, cp: '', cm: '' };
+  if (/^\d{5}[A-Z]/.test(rc)) { r.poligono = String(+rc.slice(6, 9)); r.parcela = String(+rc.slice(9, 14)); }
+  const d2 = await pedirXML(`${OVC}OVCCallejero.asmx/Consulta_DNPRC?Provincia=&Municipio=&RC=${rc}`);
+  if (d2) {
+    r.paraje = tx(d2, 'npa'); r.municipio = capital(tx(d2, 'nm')); r.cp = tx(d2, 'cp'); r.cm = tx(d2, 'cm');
+    if (!r.poligono) { r.poligono = tx(d2, 'cpo'); r.parcela = tx(d2, 'cpa'); }
+    const sub = [...d2.getElementsByTagName('dspr')];
+    const m2 = sub.reduce((s, e) => s + (+tx(e, 'ssp') || 0), 0);
+    if (m2) r.superficie = Math.round(m2 / 100) / 100;             // m² -> ha (2 decimales)
+    r.cultivo = [...new Set(sub.map(e => capital(tx(e, 'dcc'))).filter(Boolean))].join(', ');
+  }
+  return r;
+}
+// Parcela añadida a mano: rellenar con el Catastro y, si ya existe en la lista de la empresa, enlazarla
+async function completarConCatastro(l, avisar) {
+  if (l.id_parcela != null || l.catastro || l.lat == null) return;
+  const c = await consultarCatastro(l.lat, l.lon); if (!c || !parte) return;
+  l.catastro = { rc: c.rc, municipio: c.municipio, cp: c.cp, cm: c.cm, ldt: c.ldt };
+  if (c.poligono) { l.poligono = c.poligono; l.parcela = c.parcela; }
+  if (!l.paraje) l.paraje = c.paraje;
+  if (!l.tipo_cultivo) l.tipo_cultivo = c.cultivo;
+  if (c.superficie) { l.superficie = c.superficie; if (/^hect/i.test(l.unidad) && l.cantidad === '') l.cantidad = c.superficie; }
+  if (c.cp && c.poligono) l.sigpac = `${+c.cp}-${+c.cm}-${c.poligono}-${c.parcela}`;
+  // ¿Esa parcela ya está en la lista de la empresa?
+  const enLista = parcelasEmpresa().find(p => +p.poligono === +l.poligono && +p.parcela === +l.parcela);
+  if (enLista && !parte.lineas.some(x => x.id_parcela === enLista.id_parcela)) {
+    Object.assign(l, { id_parcela: enLista.id_parcela, paraje: enLista.paraje, tipo_cultivo: enLista.tipo_cultivo,
+      superficie: enLista.superficie, sigpac: enLista.sigpac, observaciones: '', catastro: null });
+    if (avisar) toast('📍 Catastro: es ' + nombreParcela(l) + ', que ya está en la lista de la empresa');
+  } else if (avisar) {
+    toast('📍 Catastro: ' + nombreParcela(l) + (l.paraje ? ' · ' + l.paraje : '') + (l.superficie ? ' · ' + fmt(l.superficie) + ' ha' : ''), 4500);
+  }
+  recalcular(); if (parte && parte.lineas.includes(l)) { pintarParcelas(); autoguardar(true); }
+}
+// Parcela de la lista: comprobar que el GPS cae en ella
+async function comprobarCatastro(l) {
+  if (l.id_parcela == null || l.lat == null || l.aviso_catastro !== undefined) return;
+  const c = await consultarCatastro(l.lat, l.lon); if (!c || !parte) return;
+  if (!c.poligono) l.aviso_catastro = '';
+  else if (+c.poligono === +l.poligono && +c.parcela === +l.parcela) l.aviso_catastro = '';
+  else {
+    l.aviso_catastro = `El GPS dice Pol. ${c.poligono} · Parc. ${c.parcela}${c.paraje ? ' (' + c.paraje + ')' : ''}`;
+    toast('⚠ Ojo: según el Catastro estás en Pol. ' + c.poligono + ' · Parc. ' + c.parcela + ', no en la parcela elegida', 6000);
+    avisar();
+  }
+  if (parte && parte.lineas.includes(l)) { pintarParcelas(); autoguardar(true); }
+}
+async function catastroPendiente() {
+  if (!parte || !navigator.onLine) return;
+  for (const l of parte.lineas) {
+    if (l.id_parcela == null) await completarConCatastro(l, false); else await comprobarCatastro(l);
+  }
+}
+
 // --- GPS del parte ---
 function pintarGps(buscando) {
   const g = parte.gps;
@@ -625,6 +699,10 @@ $('btnTerminar').addEventListener('click', async () => {
   if (enCurso() && !lineaActiva() && !confirm('¿Terminar el parte y enviarlo a la oficina? Después ya no se podrá añadir más parcelas.')) return;
 
   if (lineaActiva()) return abrirTerminar({ despues: () => $('btnTerminar').click() });   // hora de fin de la última parcela
+  if (navigator.onLine && parte.lineas.some(l => l.id_parcela == null && !l.catastro && l.lat != null)) {
+    toast('📍 Consultando el Catastro…');
+    await Promise.race([catastroPendiente(), new Promise(r => setTimeout(r, 10000))]);
+  }
   const ahora = new Date().toISOString();
   parte.activa = null;
   recalcular();
@@ -672,7 +750,7 @@ async function enviar(silencioso) {
 async function pedirEnvioSegundoPlano() {
   try { const reg = await navigator.serviceWorker.ready; if (reg.sync) await reg.sync.register('enviar-partes'); } catch (e) {}
 }
-window.addEventListener('online', () => { pintarRed(); enviar(); });
+window.addEventListener('online', () => { pintarRed(); enviar(); catastroPendiente(); });
 window.addEventListener('offline', () => { pintarRed(); pintarInicio(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && sesion) enviar(true); });
 setInterval(() => { if (sesion && document.visibilityState === 'visible') enviar(true); }, 60000);

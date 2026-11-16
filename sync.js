@@ -195,7 +195,9 @@
         poligono: l.poligono || '', parcela: l.parcela || '', paraje: l.paraje || '',
         tipo_cultivo: l.tipo_cultivo || '', superficie: l.superficie == null ? '' : l.superficie,
         sigpac: l.sigpac || '', cantidad: l.cantidad === '' || l.cantidad == null ? '' : l.cantidad,
-        unidad: l.unidad || '', observaciones: l.observaciones || '',
+        unidad: l.unidad || '',
+        observaciones: (l.observaciones || '') + (l.catastro ? ' · Catastro RC ' + l.catastro.rc + (l.catastro.municipio ? ' · ' + l.catastro.municipio : '') : '') +
+          (l.aviso_catastro ? ' · AVISO GPS: ' + l.aviso_catastro : ''),
         lat: l.lat == null ? '' : l.lat, lon: l.lon == null ? '' : l.lon,
         gps_precision_m: l.precision == null ? '' : l.precision,
         inicio: (l.tramos && l.tramos.length) ? l.tramos[0].inicio : '',
