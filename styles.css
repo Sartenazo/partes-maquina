@@ -168,3 +168,11 @@ input, select, textarea { font-size: 16px; }
 
 .parcelas .mapas { display: flex; gap: 8px; margin-top: 8px; }
 .parcelas .mapas button { flex: 1 1 0; width: auto; margin: 0; min-height: 40px; font-size: 14px; background: #fff; color: #1f4f8f; border: 1.5px solid #1f4f8f; }
+
+.pregunta { margin: 6px 0 8px; }
+.tipos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.tipos .tipo { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 96px; margin: 0;
+  padding: 10px 6px; font-size: 16px; font-weight: 700; background: #fff; color: var(--verde); border: 2px solid var(--verde); border-radius: 14px; }
+.tipos .tipo span { font-size: 32px; line-height: 1; }
+.tipos .tipo small { font-size: 12px; font-weight: 400; color: var(--gris); }
+.tipos .tipo.pronto { border-style: dashed; border-color: #c9c9c9; color: var(--gris); opacity: .75; }

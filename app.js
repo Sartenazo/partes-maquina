@@ -1,5 +1,5 @@
 // =====================================================================
-//  Partes de Máquina · lógica de pantallas
+//  Partes de trabajo (Máquina, Vendimiadora, Cosechadora...) · lógica de pantallas
 // =====================================================================
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -13,6 +13,15 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID() :
 
 let sesion = null, cat = null, parte = null, gpsWatch = null, instalarEvt = null;
 
+// ---------- tipos de parte ----------
+// unidad: unidad por defecto de cada parcela (null = la última usada) · kilos: texto del total
+const TIPOS = {
+  maquina:      { nombre: 'Trabajos con máquinas', corto: 'Máquina', icono: '🚜', maquina: true, unidad: null, kilos: 'Kilos transportados' }
+  // (Vendimiadora y Cosechadora van como Trabajos con máquinas: se elige la máquina)
+};
+const PROXIMOS = [['🧪', 'Tratamientos'], ['🤝', 'Trabajos a terceros'], ['⏱', 'Mis horas']];
+const tipoDe = p => TIPOS[(p && p.tipo) || 'maquina'] || TIPOS.maquina;
+
 // ---------- utilidades de pantalla ----------
 function toast(msg, ms = 2600) {
   const t = $('toast'); t.textContent = msg; t.classList.remove('oculto');
@@ -20,7 +29,7 @@ function toast(msg, ms = 2600) {
 }
 function mostrar(vista, titulo, sub) {
   for (const v of ['vLogin', 'vInicio', 'vParte']) $(v).classList.toggle('oculto', v !== vista);
-  $('tituloPantalla').textContent = titulo || 'Partes de Máquina';
+  $('tituloPantalla').textContent = titulo || 'Partes de trabajo';
   $('subtitulo').textContent = sub || '';
   $('btnAtras').classList.toggle('oculto', vista !== 'vParte');
   $('btnMenu').classList.toggle('oculto', vista !== 'vInicio');
@@ -55,7 +64,7 @@ async function iniciar() {
 }
 
 function irLogin() {
-  mostrar('vLogin', 'Partes de Máquina');
+  mostrar('vLogin', 'Partes de trabajo');
   if (!Sync.configurado()) {
     $('formLogin').classList.add('oculto');
     $('notaDemo').textContent = 'La app aún no está conectada con la oficina. De momento puedes probarla con datos inventados.';
@@ -90,7 +99,8 @@ $('btnDemo').addEventListener('click', async () => {
 function irInicio() {
   pararGps(); pararReloj(); pararVigilancia();
   parte = null;
-  mostrar('vInicio', 'Partes de Máquina', sesion.nombre);
+  mostrar('vInicio', 'Partes de trabajo', sesion.nombre);
+  pintarTipos();
   $('avisoDemo').classList.toggle('oculto', !sesion.demo);
   pintarInicio();
   pintarAyudaIOS();
@@ -123,26 +133,36 @@ function filaParte(p) {
     : p.estado === 'error' ? '<span class="chip error">Error</span>'
     : p.estado === 'en_curso' ? '<span class="chip curso">En curso</span>' : '<span class="chip pendiente">Pendiente</span>';
   const ini = primeraHora(p);
-  return `<li data-id="${esc(p.id)}"><div class="txt"><b>${esc(fechaES(p.fecha))} · ${esc(p.empresa || 'Sin empresa')}</b>
-    <span>${esc(p.faena || '')}${p.clase ? ' · ' + esc(p.clase) : ''} · ${n} parcela${n === 1 ? '' : 's'}${p.estado === 'en_curso' && ini ? ' · desde ' + ini : ''}</span></div>${chip}</li>`;
+  const t = tipoDe(p);
+  const det = t.maquina ? (p.faena || '') + (p.clase ? ' · ' + p.clase : '') : t.cereal ? (p.cereal || '') : '';
+  return `<li data-id="${esc(p.id)}"><div class="txt"><b>${t.icono} ${esc(fechaES(p.fecha))} · ${esc(p.empresa || 'Sin empresa')}</b>
+    <span>${esc(t.corto)}${det ? ' · ' + esc(det) : ''} · ${n} parcela${n === 1 ? '' : 's'}${p.estado === 'en_curso' && ini ? ' · desde ' + ini : ''}</span></div>${chip}</li>`;
 }
 ['listaCurso', 'listaPendientes', 'listaEnviados'].forEach(id => $(id).addEventListener('click', async e => {
   const li = e.target.closest('li[data-id]'); if (!li) return;
   abrirParte(await BD.parte(li.dataset.id));
 }));
 
-$('btnNuevo').addEventListener('click', async () => {
-  const curso = (await BD.partes()).filter(p => p.estado === 'en_curso');
-  if (curso.length && !confirm(`Ya tienes un parte en curso (${curso[0].empresa || 'sin empresa'}). ¿Empezar otro parte distinto?`)) {
+function pintarTipos() {
+  $('tiposParte').innerHTML = Object.entries(TIPOS).map(([k, t]) =>
+    `<button type="button" class="tipo" data-tipo="${k}"><span>${t.icono}</span>${esc(t.nombre)}</button>`).join('') +
+    PROXIMOS.map(([i, n]) => `<button type="button" class="tipo pronto" disabled><span>${i}</span>${esc(n)}<small>Próximamente</small></button>`).join('');
+}
+$('tiposParte').addEventListener('click', e => { const b = e.target.closest('button[data-tipo]'); if (b) nuevoParte(b.dataset.tipo); });
+async function nuevoParte(tipo) {
+  const t = TIPOS[tipo];
+  const curso = (await BD.partes()).filter(p => p.estado === 'en_curso' && ((p.tipo || 'maquina') === tipo));
+  if (curso.length && !confirm(`Ya tienes un parte de ${t.corto} en curso (${curso[0].empresa || 'sin empresa'}). ¿Empezar otro distinto?`)) {
     return abrirParte(curso[0]);
   }
   const ult = (await BD.leer('ultimosValores')) || {};
   abrirParte({
-    id: uuid(), estado: 'nuevo', fecha: hoy(), hora_inicio: '', hora_fin: '',
-    id_empresa: null, empresa: '', clase: ult.clase || '', faena: '', maquina: '',
+    id: uuid(), tipo, estado: 'nuevo', fecha: hoy(), hora_inicio: '', hora_fin: '',
+    id_empresa: null, empresa: '', clase: t.maquina ? (ult.clase || '') : '', faena: '', maquina: '',
+    cereal: t.cereal ? (ult.cereal || '') : '',
     kilos: '', observaciones: '', gps: null, lineas: [], activa: null, creado_movil: null
   });
-});
+}
 
 // ---------- tiempos ----------
 const hhmm = iso => iso ? new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -177,16 +197,22 @@ function enCurso() { return parte && (parte.estado === 'en_curso' || parte.estad
 
 function abrirParte(p) {
   parte = JSON.parse(JSON.stringify(p));
+  if (!parte.tipo) parte.tipo = 'maquina';
   for (const l of parte.lineas) if (!l.tramos) l.tramos = [];
+  const t = tipoDe(parte);
+  $('bloqueMaquina').classList.toggle('oculto', !t.maquina);
+  $('bloqueCereal').classList.toggle('oculto', !t.cereal);
+  $('kilosTxt').textContent = t.kilos;
   const nuevo = parte.estado === 'nuevo';
   const ro = soloLectura();
   mostrar('vParte', nuevo ? 'Nuevo parte' : ro ? 'Parte enviado' : parte.estado === 'en_curso' ? 'Parte en curso' : 'Parte terminado',
-    nuevo ? 'Máquina' : fechaES(parte.fecha) + ' · ' + (parte.empresa || ''));
+    t.icono + ' ' + t.corto + (nuevo ? '' : ' · ' + fechaES(parte.fecha) + ' · ' + (parte.empresa || '')));
   $('pFecha').value = parte.fecha;
   $('pObs').value = parte.observaciones || '';
   pintarSelector('pEmpresa', parte.empresa, 'Elegir empresa…');
   pintarSelector('pClase', parte.clase, 'Elegir máquina…');
   pintarSelector('pFaena', parte.faena, 'Elegir tipo de trabajo…');
+  pintarSelector('pCereal', parte.cereal, 'Elegir cereal…');
   recalcular();
   pintarParcelas();
   pintarGps();
@@ -223,7 +249,7 @@ document.querySelectorAll('.selector').forEach(b => b.addEventListener('click', 
 
 function abrirSelector(lista) {
   selActual = lista;
-  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
+  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
   $('selBuscar').value = '';
   pintarSel();
   abrirDlg('dlgSelector');
@@ -241,7 +267,7 @@ function pintarSel() {
       `<li data-id="__otra" class="otra"><div class="txt"><b>📍 No está en la lista</b><span>Se guarda el GPS y en la oficina se busca en el Catastro</span></div></li>`;
     return;
   }
-  const actual = { empresas: parte.empresa, faenas: parte.faena, clases: parte.clase }[selActual];
+  const actual = { empresas: parte.empresa, faenas: parte.faena, clases: parte.clase, cereales: parte.cereal }[selActual];
   const items = (cat[selActual] || []).filter(x => !q || normal(x.nombre + ' ' + (x.cif || '')).includes(q));
   $('selLista').innerHTML = items.length ? items.map(x =>
     `<li data-id="${x.id}" class="${x.nombre === actual ? 'marcado' : ''}"><div class="txt"><b>${esc(x.nombre)}</b>${x.localidad ? `<span>${esc(x.localidad)}</span>` : ''}</div></li>`
@@ -265,6 +291,9 @@ $('selLista').addEventListener('click', e => {
     pintarSelector('pEmpresa', x.nombre); pintarParcelas();
   } else if (selActual === 'faenas') {
     parte.faena = x.nombre; pintarSelector('pFaena', x.nombre);
+  } else if (selActual === 'cereales') {
+    parte.cereal = x.nombre; pintarSelector('pCereal', x.nombre);
+    for (const l of parte.lineas) l.tipo_cereal = x.nombre;
   } else {
     parte.clase = x.nombre; pintarSelector('pClase', x.nombre);
   }
@@ -354,11 +383,11 @@ async function empezarEn(clave, yaPreguntado) {
   if (!l) {
     const p = cat.parcelas.find(x => String(x.id_parcela) === clave);
     const ult = (await BD.leer('ultimosValores')) || {};
-    const unidad = ult.unidad || 'Hectareas';
+    const unidad = tipoDe(parte).unidad || ult.unidad || 'Hectareas';
     l = { id: uuid(), id_parcela: p.id_parcela, poligono: p.poligono, parcela: p.parcela, paraje: p.paraje,
           tipo_cultivo: p.tipo_cultivo, superficie: p.superficie, sigpac: p.sigpac,
           cantidad: /^hect/i.test(unidad) ? num(p.superficie) : '', unidad, observaciones: '',
-          lat: null, lon: null, precision: null, tramos: [] };
+          lat: null, lon: null, precision: null, tramos: [], tipo_cereal: parte.cereal || '' };
     parte.lineas.push(l);
   }
   l.tramos.push({ inicio: ahora, fin: null });
@@ -513,7 +542,7 @@ $('listaParcelas').addEventListener('change', e => {
     if (esHoras(l.unidad)) { l.cantidad_auto = true; }
     else if (/^hect/i.test(l.unidad) && (l.cantidad === '' || l.cantidad_auto) && l.superficie) { l.cantidad = num(l.superficie); l.cantidad_auto = false; }
     else if (l.cantidad_auto) { l.cantidad = ''; l.cantidad_auto = false; }
-    BD.leer('ultimosValores').then(u => BD.guardar('ultimosValores', Object.assign(u || {}, { unidad: l.unidad })));
+    if (tipoDe(parte).maquina) BD.leer('ultimosValores').then(u => BD.guardar('ultimosValores', Object.assign(u || {}, { unidad: l.unidad })));
   } else {
     l.cantidad = num(e.target.value);
     if (esHoras(l.unidad)) l.cantidad_auto = false;      // horas corregidas a mano
@@ -532,8 +561,8 @@ $('formOtraParcela').addEventListener('submit', async e => {
   const l = {
     id: uuid(), id_parcela: null, poligono: $('opPoligono').value.trim(), parcela: $('opParcela').value.trim(),
     paraje: $('opParaje').value.trim(), tipo_cultivo: $('opCultivo').value.trim(), superficie: null, sigpac: '',
-    cantidad: '', unidad: ult.unidad || 'Hectareas', observaciones: 'Parcela añadida a mano en el móvil',
-    lat: null, lon: null, precision: null, tramos: []
+    cantidad: '', unidad: tipoDe(parte).unidad || ult.unidad || 'Hectareas', observaciones: 'Parcela añadida a mano en el móvil',
+    lat: null, lon: null, precision: null, tramos: [], tipo_cereal: parte.cereal || ''
   };
   parte.lineas.push(l);
   cerrarDlg('dlgParcela');
@@ -672,7 +701,9 @@ function leerFormulario() {
 async function recordarValores() {
   const prev = (await BD.leer('ultimosValores')) || {};
   const ultU = parte.lineas.length ? parte.lineas[parte.lineas.length - 1].unidad : undefined;
-  await BD.guardar('ultimosValores', { clase: parte.clase, unidad: ultU || prev.unidad });
+  const t = tipoDe(parte);
+  await BD.guardar('ultimosValores', Object.assign(prev, t.maquina ? { clase: parte.clase, unidad: ultU || prev.unidad } : {},
+    t.cereal && parte.cereal ? { cereal: parte.cereal } : {}));
 }
 
 $('btnGuardar').addEventListener('click', async () => {
@@ -699,7 +730,8 @@ $('btnTerminar').addEventListener('click', async () => {
   const faltan = [];
   if (!parte.fecha) faltan.push('la fecha');
   if (!parte.id_empresa) faltan.push('la empresa');
-  if (!parte.faena) faltan.push('el tipo de trabajo');
+  if (tipoDe(parte).maquina && !parte.faena) faltan.push('el tipo de trabajo');
+  if (tipoDe(parte).cereal && !parte.cereal) faltan.push('el cereal');
   if (faltan.length) { toast('Falta ' + faltan.join(', ')); return; }
   if (parte.fecha > hoy()) { toast('La fecha no puede ser posterior a hoy'); return; }
   if (!parte.lineas.length && !confirm('No has apuntado ninguna parcela. ¿Terminar igualmente?')) return;

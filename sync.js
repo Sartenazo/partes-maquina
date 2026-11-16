@@ -130,14 +130,15 @@
       if (s && s.demo) return g.BD.leer('catalogos');
       return conToken(async tk => {
         // clases = Máquina (Claseequipamiento) · faenas = Tipo Trabajo (Clasefaena)
-        const [empresas, parcelas, faenas, clases, unidades] = await Promise.all([
+        const [empresas, parcelas, faenas, clases, unidades, cereales] = await Promise.all([
           leerTabla('cat_empresas', tk, 'nombre'),
           leerTabla('cat_parcelas', tk, 'poligono,parcela'),
           leerTabla('cat_faenas', tk, 'nombre'),
           leerTabla('cat_clases', tk, 'nombre'),
-          leerTabla('cat_unidades', tk, 'id')
+          leerTabla('cat_unidades', tk, 'id'),
+          leerTabla('cat_cereales', tk, 'nombre').catch(() => [])
         ]);
-        const cat = { empresas, parcelas, faenas, clases, unidades, fecha: new Date().toISOString() };
+        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, fecha: new Date().toISOString() };
         await g.BD.guardar('catalogos', cat);
         return cat;
       });
@@ -183,7 +184,7 @@
   // Lo que viaja a la nube (sin campos internos de la app)
   function aEnvio(p) {
     return {
-      id: p.id, fecha: p.fecha, hora_inicio: p.hora_inicio || '', hora_fin: p.hora_fin || '',
+      id: p.id, tipo: p.tipo || 'maquina', fecha: p.fecha, hora_inicio: p.hora_inicio || '', hora_fin: p.hora_fin || '',
       id_empresa: p.id_empresa, empresa: p.empresa, clase: p.clase || '', faena: p.faena || '',
       maquina: '', kilos: p.kilos === '' || p.kilos == null ? '' : p.kilos,
       observaciones: p.observaciones || '',
@@ -195,7 +196,7 @@
         poligono: l.poligono || '', parcela: l.parcela || '', paraje: l.paraje || '',
         tipo_cultivo: l.tipo_cultivo || '', superficie: l.superficie == null ? '' : l.superficie,
         sigpac: l.sigpac || '', cantidad: l.cantidad === '' || l.cantidad == null ? '' : l.cantidad,
-        unidad: l.unidad || '',
+        unidad: l.unidad || '', tipo_cereal: l.tipo_cereal || p.cereal || '',
         observaciones: (l.observaciones || '') + (l.catastro ? ' · Catastro RC ' + l.catastro.rc + (l.catastro.municipio ? ' · ' + l.catastro.municipio : '') : '') +
           (l.aviso_catastro ? ' · AVISO GPS: ' + l.aviso_catastro : ''),
         lat: l.lat == null ? '' : l.lat, lon: l.lon == null ? '' : l.lon,
