@@ -95,22 +95,49 @@
       s.nombre = fichas[0].nombre; s.clave = fichas[0].clave;
       await g.BD.guardar('sesion', s);
       await g.Sync.descargarCatalogos();
+      await g.Sync.recuperarBorradores().catch(() => {});
       return s;
+    },
+
+    // Copia en la nube de un parte EN CURSO (por si se rompe o se cambia el móvil)
+    async guardarBorrador(p) {
+      const s = await g.BD.leer('sesion');
+      if (!s || s.demo) return;
+      return conToken(tk => peticion('/rest/v1/partes_borradores?on_conflict=id', {
+        metodo: 'POST', token: tk, cuerpo: { id: p.id, datos: p, actualizado: new Date().toISOString() },
+        cabeceras: { Prefer: 'resolution=merge-duplicates,return=minimal' }
+      }));
+    },
+    async borrarBorrador(id) {
+      const s = await g.BD.leer('sesion');
+      if (!s || s.demo) return;
+      return conToken(tk => peticion('/rest/v1/partes_borradores?id=eq.' + id, { metodo: 'DELETE', token: tk }));
+    },
+    // Al entrar en un móvil nuevo: recupera los partes en curso guardados en la nube
+    async recuperarBorradores() {
+      const s = await g.BD.leer('sesion');
+      if (!s || s.demo) return 0;
+      const { datos } = await conToken(tk => peticion('/rest/v1/partes_borradores?select=datos', { token: tk }));
+      let n = 0;
+      for (const b of datos || []) {
+        if (b.datos && b.datos.id && !(await g.BD.parte(b.datos.id))) { await g.BD.guardarParte(b.datos); n++; }
+      }
+      return n;
     },
 
     async descargarCatalogos() {
       const s = await g.BD.leer('sesion');
       if (s && s.demo) return g.BD.leer('catalogos');
       return conToken(async tk => {
-        const [empresas, parcelas, faenas, clases, unidades, maquinas] = await Promise.all([
+        // clases = Máquina (Claseequipamiento) · faenas = Tipo Trabajo (Clasefaena)
+        const [empresas, parcelas, faenas, clases, unidades] = await Promise.all([
           leerTabla('cat_empresas', tk, 'nombre'),
           leerTabla('cat_parcelas', tk, 'poligono,parcela'),
           leerTabla('cat_faenas', tk, 'nombre'),
           leerTabla('cat_clases', tk, 'nombre'),
-          leerTabla('cat_unidades', tk, 'id'),
-          leerTabla('cat_maquinas', tk, 'nombre')
+          leerTabla('cat_unidades', tk, 'id')
         ]);
-        const cat = { empresas, parcelas, faenas, clases, unidades, maquinas, fecha: new Date().toISOString() };
+        const cat = { empresas, parcelas, faenas, clases, unidades, fecha: new Date().toISOString() };
         await g.BD.guardar('catalogos', cat);
         return cat;
       });
@@ -123,7 +150,7 @@
         const res = { enviados: 0, errores: 0, sinConexion: false };
         const s = await g.BD.leer('sesion');
         if (!s) return res;
-        const pendientes = (await g.BD.partes()).filter(p => p.estado !== 'enviado');
+        const pendientes = (await g.BD.partes()).filter(p => p.estado === 'pendiente' || p.estado === 'error');
         for (const p of pendientes) {
           try {
             if (s.demo) {
@@ -151,12 +178,14 @@
     }
   };
 
+  const hm = iso => { const d = new Date(iso); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+
   // Lo que viaja a la nube (sin campos internos de la app)
   function aEnvio(p) {
     return {
       id: p.id, fecha: p.fecha, hora_inicio: p.hora_inicio || '', hora_fin: p.hora_fin || '',
       id_empresa: p.id_empresa, empresa: p.empresa, clase: p.clase || '', faena: p.faena || '',
-      maquina: p.maquina || '', kilos: p.kilos === '' || p.kilos == null ? '' : p.kilos,
+      maquina: '', kilos: p.kilos === '' || p.kilos == null ? '' : p.kilos,
       observaciones: p.observaciones || '',
       lat: p.gps ? p.gps.lat : '', lon: p.gps ? p.gps.lon : '',
       gps_precision_m: p.gps ? p.gps.precision : '', gps_fecha: p.gps ? p.gps.fecha : '',
@@ -167,7 +196,12 @@
         tipo_cultivo: l.tipo_cultivo || '', superficie: l.superficie == null ? '' : l.superficie,
         sigpac: l.sigpac || '', cantidad: l.cantidad === '' || l.cantidad == null ? '' : l.cantidad,
         unidad: l.unidad || '', observaciones: l.observaciones || '',
-        lat: l.lat == null ? '' : l.lat, lon: l.lon == null ? '' : l.lon
+        lat: l.lat == null ? '' : l.lat, lon: l.lon == null ? '' : l.lon,
+        gps_precision_m: l.precision == null ? '' : l.precision,
+        inicio: (l.tramos && l.tramos.length) ? l.tramos[0].inicio : '',
+        fin: (l.tramos && l.tramos.length) ? (l.tramos[l.tramos.length - 1].fin || '') : '',
+        horas: (l.tramos && l.tramos.length) ? Math.round(l.tramos.reduce((s, t) => s + (new Date(t.fin || Date.now()) - new Date(t.inicio)) / 36e5, 0) * 100) / 100 : '',
+        tramos: (l.tramos || []).map(t => hm(t.inicio) + '-' + (t.fin ? hm(t.fin) : '')).join(', ')
       }))
     };
   }

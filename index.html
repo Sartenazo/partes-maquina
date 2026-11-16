@@ -61,6 +61,10 @@
     <p class="nota">Después abre la app siempre desde el icono del tractor. Así guarda los partes sin cobertura y no se borran.</p>
     <button class="secundario" id="btnOcultarIOS" type="button">Entendido</button>
   </div>
+  <section id="secCurso" class="oculto">
+    <h3>En curso</h3>
+    <ul id="listaCurso" class="lista"></ul>
+  </section>
   <section>
     <h3 id="tPendientes">Pendientes de enviar</h3>
     <ul id="listaPendientes" class="lista"></ul>
@@ -73,30 +77,16 @@
 
 <!-- ===== PARTE ===== -->
 <main id="vParte" class="vista oculto">
+  <div id="avisoCurso" class="aviso curso oculto"></div>
   <form id="formParte" novalidate>
     <div class="tarjeta">
-      <div class="fila">
-        <label>Fecha<input id="pFecha" type="date" required></label>
-      </div>
-      <div class="fila dos">
-        <label>Hora inicio
-          <span class="con-boton"><input id="pHoraIni" type="time"><button type="button" data-ahora="pHoraIni" class="mini">Ahora</button></span>
-        </label>
-        <label>Hora fin
-          <span class="con-boton"><input id="pHoraFin" type="time"><button type="button" data-ahora="pHoraFin" class="mini">Ahora</button></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="tarjeta">
+      <label>Fecha<input id="pFecha" type="date" required></label>
       <label>Empresa / cliente *</label>
       <button type="button" class="selector" id="pEmpresa" data-lista="empresas">Elegir empresa…</button>
-      <label>Clase</label>
-      <select id="pClase"></select>
-      <label>Faena *</label>
-      <button type="button" class="selector" id="pFaena" data-lista="faenas">Elegir faena…</button>
       <label>Máquina</label>
-      <button type="button" class="selector" id="pMaquina" data-lista="maquinas">Elegir máquina…</button>
+      <button type="button" class="selector" id="pClase" data-lista="clases">Elegir máquina…</button>
+      <label>Tipo Trabajo *</label>
+      <button type="button" class="selector" id="pFaena" data-lista="faenas">Elegir tipo de trabajo…</button>
     </div>
 
     <div class="tarjeta">
@@ -104,18 +94,24 @@
         <h3>Parcelas</h3>
         <span id="resumenParcelas" class="nota"></span>
       </div>
+      <div id="parcelaActiva" class="activa oculto">
+        <div><b id="activaNombre"></b><br><span id="activaTiempo"></span></div>
+        <button type="button" class="mini peligro-suave" id="btnParar">⏸ Parar</button>
+      </div>
+      <p id="ayudaParcelas" class="nota">Al llegar a cada parcela pulsa <b>▶ Empezar aquí</b>: se guarda su ubicación y la hora. Al pasar a otra, la anterior se cierra sola.</p>
       <input id="buscarParcela" type="search" placeholder="Buscar por polígono, parcela, paraje o cultivo" class="oculto">
       <ul id="listaParcelas" class="parcelas"><li class="nota">Elige primero la empresa.</li></ul>
       <button type="button" class="secundario" id="btnOtraParcela">＋ Parcela que no está en la lista</button>
     </div>
 
     <div class="tarjeta">
-      <label>Kilos transportados (si hubo transporte)<input id="pKilos" type="number" inputmode="decimal" min="0" step="any"></label>
+      <div class="kilos"><span>Kilos transportados</span><b id="kilosSuma">0 kg</b></div>
+      <p class="nota">Se suman solos: es el total de las parcelas apuntadas en <b>Kilos</b>.</p>
       <label>Observaciones<textarea id="pObs" rows="3" maxlength="200"></textarea></label>
     </div>
 
     <div class="tarjeta gps">
-      <h3>Ubicación</h3>
+      <h3>Ubicación del parte</h3>
       <p id="gpsEstado" class="nota">Sin ubicación</p>
       <div class="fila dos">
         <button type="button" class="secundario" id="btnGps">📍 Tomar ubicación</button>
@@ -126,7 +122,8 @@
     <p id="parteError" class="error oculto"></p>
     <div class="pie-fijo">
       <button type="button" class="peligro oculto" id="btnBorrarParte">Borrar</button>
-      <button type="submit" class="principal" id="btnGuardar">Guardar parte</button>
+      <button type="button" class="secundario" id="btnGuardar">Guardar</button>
+      <button type="button" class="principal" id="btnTerminar">✔ Terminar y enviar</button>
     </div>
   </form>
 </main>

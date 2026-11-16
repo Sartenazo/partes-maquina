@@ -132,3 +132,22 @@ button:disabled { opacity: .55; }
 .ico-ios { display: inline-block; border: 1.5px solid var(--verde); border-radius: 6px; padding: 0 5px; color: var(--verde); }
 /* iPhone: que Safari no amplíe al tocar un campo (necesita letra ≥ 16px) */
 input, select, textarea { font-size: 16px; }
+
+.aviso.curso { background: #e5f0ff; color: #1f4f8f; }
+.aviso.viejo { background: #fde7e5; color: var(--rojo); }
+.chip.curso { background: #e5f0ff; color: #1f4f8f; }
+.activa { display: flex; align-items: center; gap: 10px; background: #e5f0ff; border: 1.5px solid #4a7fc1;
+  border-radius: 12px; padding: 10px 12px; margin: 6px 0 10px; }
+.activa > div { flex: 1; }
+.activa #activaTiempo { color: #1f4f8f; font-size: 14px; }
+.peligro-suave { background: #fff; color: var(--rojo); border: 1.5px solid var(--rojo); }
+.parcelas li.trabajando { border-color: #4a7fc1; background: #eef5ff; }
+.parcelas .acciones { display: flex; gap: 8px; margin-top: 8px; }
+.parcelas .acciones button { margin: 0; min-height: 44px; }
+.parcelas .empezar { background: var(--verde); color: #fff; }
+.parcelas .quitar { flex: 0 0 52px; background: #fff; color: var(--rojo); border-color: var(--rojo); }
+.parcelas .tiempos { display: block; color: #1f4f8f; font-size: 14px; margin-top: 2px; }
+.parcelas .cab { cursor: default; }
+.kilos { display: flex; justify-content: space-between; align-items: baseline; font-size: 18px; }
+.kilos b { font-size: 22px; color: var(--verde); }
+.pie-fijo .secundario { flex: 0 0 30%; margin: 0; }
