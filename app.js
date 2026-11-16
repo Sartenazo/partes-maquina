@@ -163,7 +163,7 @@ async function nuevoParte(tipo) {
   abrirParte({
     id: uuid(), tipo, estado: 'nuevo', fecha: hoy(), hora_inicio: '', hora_fin: '',
     id_empresa: null, empresa: '', clase: t.maquina ? (ult.clase || '') : '', faena: '', maquina: '',
-    cereal: t.cereal ? (ult.cereal || '') : '',
+    cereal: t.cereal ? (ult.cereal || '') : '', riego: t.cereal ? (ult.riego || '') : '',
     kilos: '', observaciones: '', gps: null, lineas: [], activa: null, creado_movil: null
   });
 }
@@ -217,6 +217,7 @@ function abrirParte(p) {
   pintarSelector('pClase', parte.clase, 'Elegir máquina…');
   pintarSelector('pFaena', parte.faena, 'Elegir tipo de trabajo…');
   pintarSelector('pCereal', parte.cereal, 'Elegir cereal…');
+  pintarRiego();
   recalcular();
   pintarParcelas();
   pintarGps();
@@ -391,7 +392,7 @@ async function empezarEn(clave, yaPreguntado) {
     l = { id: uuid(), id_parcela: p.id_parcela, poligono: p.poligono, parcela: p.parcela, paraje: p.paraje,
           tipo_cultivo: p.tipo_cultivo, superficie: p.superficie, sigpac: p.sigpac,
           cantidad: /^hect/i.test(unidad) ? num(p.superficie) : '', unidad, observaciones: '',
-          lat: null, lon: null, precision: null, tramos: [], tipo_cereal: parte.cereal || '' };
+          lat: null, lon: null, precision: null, tramos: [], tipo_cereal: parte.cereal || '', cereal: parte.riego || '' };
     parte.lineas.push(l);
   }
   l.tramos.push({ inicio: ahora, fin: null });
@@ -566,7 +567,7 @@ $('formOtraParcela').addEventListener('submit', async e => {
     id: uuid(), id_parcela: null, poligono: $('opPoligono').value.trim(), parcela: $('opParcela').value.trim(),
     paraje: $('opParaje').value.trim(), tipo_cultivo: $('opCultivo').value.trim(), superficie: null, sigpac: '',
     cantidad: '', unidad: tipoDe(parte).unidad || ult.unidad || 'Hectareas', observaciones: 'Parcela añadida a mano en el móvil',
-    lat: null, lon: null, precision: null, tramos: [], tipo_cereal: parte.cereal || ''
+    lat: null, lon: null, precision: null, tramos: [], tipo_cereal: parte.cereal || '', cereal: parte.riego || ''
   };
   parte.lineas.push(l);
   cerrarDlg('dlgParcela');
@@ -707,7 +708,7 @@ async function recordarValores() {
   const ultU = parte.lineas.length ? parte.lineas[parte.lineas.length - 1].unidad : undefined;
   const t = tipoDe(parte);
   await BD.guardar('ultimosValores', Object.assign(prev, t.maquina ? { clase: parte.clase, unidad: ultU || prev.unidad } : {},
-    t.cereal && parte.cereal ? { cereal: parte.cereal } : {}));
+    t.cereal && parte.cereal ? { cereal: parte.cereal, riego: parte.riego || '' } : {}));
 }
 
 $('btnGuardar').addEventListener('click', async () => {
@@ -736,6 +737,7 @@ $('btnTerminar').addEventListener('click', async () => {
   if (!parte.id_empresa) faltan.push('la empresa');
   if (tipoDe(parte).maquina && !parte.faena) faltan.push('el tipo de trabajo');
   if (tipoDe(parte).cereal && !parte.cereal) faltan.push('el cereal');
+  if (tipoDe(parte).cereal && !parte.riego) faltan.push('si es secano o riego');
   if (faltan.length) { toast('Falta ' + faltan.join(', ')); return; }
   if (parte.fecha > hoy()) { toast('La fecha no puede ser posterior a hoy'); return; }
   if (!parte.lineas.length && !confirm('No has apuntado ninguna parcela. ¿Terminar igualmente?')) return;
@@ -1007,3 +1009,14 @@ async function salirHoras() {
   else if (horas.estado !== 'enviado') { leerHoras(); await BD.guardarParte(horas); }
   irInicio();
 }
+
+// Cosechadora: cereal secano / riego (campo Cereal de las líneas en Access)
+function pintarRiego() {
+  document.querySelectorAll('[data-riego]').forEach(b => b.classList.toggle('elegido', !!parte && parte.riego === b.dataset.riego));
+}
+document.querySelectorAll('[data-riego]').forEach(b => b.addEventListener('click', () => {
+  if (!parte || soloLectura()) return;
+  parte.riego = b.dataset.riego;
+  for (const l of parte.lineas) l.cereal = parte.riego;
+  pintarRiego(); autoguardar();
+}));

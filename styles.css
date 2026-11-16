@@ -179,3 +179,6 @@ input, select, textarea { font-size: 16px; }
 
 label.check { display: flex; align-items: center; gap: 10px; font-weight: 600; margin: 6px 0; }
 label.check input { width: 24px; height: 24px; min-height: 0; margin: 0; }
+
+.riego button { margin: 6px 0 0; }
+.riego button.elegido { background: var(--verde); color: #fff; border-color: var(--verde); }
