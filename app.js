@@ -23,6 +23,41 @@ const TIPOS = {
 const PROXIMOS = [['🧪', 'Tratamientos'], ['🤝', 'Trabajos a terceros']];
 const tipoDe = p => TIPOS[(p && p.tipo) || 'maquina'] || TIPOS.maquina;
 
+// ---------- reloj sencillo: dos desplegables (hora y minutos) en vez del reloj de agujas ----------
+function relojSencillo(inp, conVacio) {
+  const P = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  const D = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'disabled');
+  inp.type = 'text'; inp.required = false; inp.classList.add('oculto');
+  const caja = document.createElement('div'); caja.className = 'reloj';
+  const sh = document.createElement('select'), sm = document.createElement('select');
+  sh.setAttribute('aria-label', 'Hora'); sm.setAttribute('aria-label', 'Minutos');
+  const op = (s, v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; s.appendChild(o); };
+  op(sh, '', '--'); for (let h = 0; h < 24; h++) op(sh, String(h).padStart(2, '0'), String(h).padStart(2, '0'));
+  op(sm, '', '--'); for (let m = 0; m < 60; m += 5) op(sm, String(m).padStart(2, '0'), String(m).padStart(2, '0'));
+  const dosp = document.createElement('span'); dosp.textContent = ':';
+  caja.append(sh, dosp, sm); inp.after(caja);
+  const pintar = v => {
+    const [h, m] = (v || '').split(':');
+    if (m && ![...sm.options].some(o => o.value === m)) {          // minuto que no es múltiplo de 5 (p. ej. "Entro ahora")
+      op(sm, m, m); [...sm.options].slice(1).sort((a, b) => a.value - b.value).forEach(o => sm.appendChild(o));
+    }
+    sh.value = h || ''; sm.value = h ? (m || '00') : '';
+  };
+  const cambio = () => {
+    if (sh.value && !sm.value) sm.value = '00';
+    if (!sh.value) sm.value = '';
+    P.set.call(inp, sh.value ? sh.value + ':' + sm.value : '');
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  sh.addEventListener('change', cambio); sm.addEventListener('change', cambio);
+  Object.defineProperty(inp, 'value', { get() { return P.get.call(inp); }, set(v) { P.set.call(inp, v); pintar(v); } });
+  Object.defineProperty(inp, 'disabled', { get() { return D.get.call(inp); }, set(v) { D.set.call(inp, v); sh.disabled = sm.disabled = !!v; } });
+  if (!conVacio) sh.options[0].hidden = true;
+  pintar(P.get.call(inp));
+}
+['hEntrada', 'hSalida'].forEach(id => relojSencillo($(id), true));
+relojSencillo($('terHora'), false);
+
 // ---------- utilidades de pantalla ----------
 function toast(msg, ms = 2600) {
   const t = $('toast'); t.textContent = msg; t.classList.remove('oculto');
