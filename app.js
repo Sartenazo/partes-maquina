@@ -55,7 +55,7 @@ function relojSencillo(inp, conVacio) {
   if (!conVacio) sh.options[0].hidden = true;
   pintar(P.get.call(inp));
 }
-['hEntrada', 'hSalida'].forEach(id => relojSencillo($(id), true));
+relojSencillo($('hHoras'), true);
 relojSencillo($('terHora'), false);
 
 // ---------- utilidades de pantalla ----------
@@ -223,7 +223,10 @@ function esKilos(u) { return /^kilo/i.test(u || ''); }
 function esHoras(u) { return /^hora/i.test(u || ''); }
 function recalcular() {
   for (const l of parte.lineas) if (esHoras(l.unidad) && l.cantidad_auto !== false) l.cantidad = r2(horasLinea(l));
-  parte.kilos = r2(parte.lineas.reduce((s, l) => s + (esKilos(l.unidad) ? (+l.cantidad || 0) : 0), 0));
+  if (tipoDe(parte).maquina) {
+    // Máquina: los kilos transportados se escriben a mano (las parcelas suelen ir en hectáreas u horas)
+    const v = $('pKilos').value; parte.kilos = v === '' ? '' : r2(Math.max(0, +v || 0));
+  } else parte.kilos = r2(parte.lineas.reduce((s, l) => s + (esKilos(l.unidad) ? (+l.cantidad || 0) : 0), 0));
   $('kilosSuma').textContent = fmt(parte.kilos || 0) + ' kg';
 }
 let reloj = null;
@@ -242,6 +245,9 @@ function abrirParte(p) {
   $('bloqueMaquina').classList.toggle('oculto', !t.maquina);
   $('bloqueCereal').classList.toggle('oculto', !t.cereal);
   $('kilosTxt').textContent = t.kilos;
+  $('kilosAuto').classList.toggle('oculto', !!t.maquina); $('kilosNota').classList.toggle('oculto', !!t.maquina);
+  $('kilosManual').classList.toggle('oculto', !t.maquina);
+  $('pKilos').value = t.maquina && parte.kilos !== '' && parte.kilos != null && +parte.kilos > 0 ? parte.kilos : '';
   const nuevo = parte.estado === 'nuevo';
   const ro = soloLectura();
   mostrar('vParte', nuevo ? 'Nuevo parte' : ro ? 'Parte enviado' : parte.estado === 'en_curso' ? 'Parte en curso' : 'Parte terminado',
@@ -609,6 +615,7 @@ $('formOtraParcela').addEventListener('submit', async e => {
   empezarEn(claveLinea(l));
 });
 $('pObs').addEventListener('change', () => { parte.observaciones = $('pObs').value.trim(); autoguardar(); });
+$('pKilos').addEventListener('change', () => { recalcular(); autoguardar(); });
 $('pFecha').addEventListener('change', () => { parte.fecha = $('pFecha').value; pintarAvisoCurso(); autoguardar(); });
 
 
@@ -923,6 +930,7 @@ async function abrirMapa(l, google) {
 //  MIS HORAS (control de trabajadores -> tabla Diario de Access)
 // =====================================================================
 const aMin = t => { if (!t) return null; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+const aHHMM = n => { if (n === '' || n == null || isNaN(+n)) return ''; const m = Math.round(+n * 60); return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
 function calcHoras(h) {
   if (h.vacaciones || h.baja_medica) return 0;
   const e = aMin(h.hora_entrada), s = aMin(h.hora_salida);
@@ -936,7 +944,7 @@ function filaHoras(h) {
     : h.estado === 'error' ? '<span class="chip error">Error</span>'
     : h.estado === 'en_curso' ? '<span class="chip curso">En curso</span>' : '<span class="chip pendiente">Pendiente</span>';
   const det = h.vacaciones ? 'Vacaciones' : h.baja_medica ? 'Baja médica'
-    : (h.hora_entrada || '?') + '–' + (h.hora_salida || 'ahora') + (h.horas !== '' && h.horas != null && h.hora_salida ? ' · ' + duracion(+h.horas) : '');
+    : (h.horas !== '' && h.horas != null ? duracion(+h.horas) + ' trabajadas' : 'Sin horas');
   return `<li data-id="${esc(h.id)}"><div class="txt"><b>⏱ ${esc(fechaES(h.fecha))} · Mis horas</b><span>${esc(det)}</span></div>${chip}</li>`;
 }
 async function nuevasHoras() {
@@ -951,8 +959,8 @@ function abrirHoras(h) {
   horas = JSON.parse(JSON.stringify(h)); parte = null;
   const ro = horas.estado === 'enviado';
   mostrar('vHoras', horas.estado === 'nuevo' ? 'Mis horas' : ro ? 'Horas enviadas' : 'Mis horas', fechaES(horas.fecha));
-  $('hFecha').value = horas.fecha; $('hEntrada').value = horas.hora_entrada || ''; $('hSalida').value = horas.hora_salida || '';
-  $('hDescanso').value = horas.descanso_min === '' || horas.descanso_min == null ? '' : horas.descanso_min;
+  if ((horas.horas === '' || horas.horas == null) && horas.hora_entrada) horas.horas = calcHoras(horas);   // jornadas antiguas con entrada/salida
+  $('hFecha').value = horas.fecha; $('hHoras').value = aHHMM(horas.horas);
   $('hVacaciones').checked = !!horas.vacaciones; $('hBaja').checked = !!horas.baja_medica;
   $('hObs').value = horas.observaciones || '';
   $('vHoras').querySelectorAll('input, textarea, button').forEach(el => { el.disabled = ro; });
@@ -963,22 +971,17 @@ function abrirHoras(h) {
   pintarHoras();
 }
 function leerHoras() {
-  horas.fecha = $('hFecha').value; horas.hora_entrada = $('hEntrada').value; horas.hora_salida = $('hSalida').value;
-  horas.descanso_min = $('hDescanso').value === '' ? '' : Math.max(0, parseInt($('hDescanso').value, 10) || 0);
+  horas.fecha = $('hFecha').value; horas.hora_entrada = ''; horas.hora_salida = ''; horas.descanso_min = '';
   horas.vacaciones = $('hVacaciones').checked; horas.baja_medica = $('hBaja').checked;
   horas.observaciones = $('hObs').value.trim();
-  horas.horas = calcHoras(horas);
+  const t = $('hHoras').value;
+  horas.horas = (horas.vacaciones || horas.baja_medica) ? 0 : (t ? r2(aMin(t) / 60) : '');
 }
 function pintarHoras() {
   leerHoras();
   const ausente = horas.vacaciones || horas.baja_medica;
-  ['hEntrada', 'hSalida', 'hDescanso', 'hEntrarYa', 'hSalirYa'].forEach(id => { if (horas.estado !== 'enviado') $(id).disabled = ausente; });
-  $('hTotal').textContent = ausente ? (horas.vacaciones ? 'Vacaciones' : 'Baja médica')
-    : horas.horas === '' ? (horas.hora_entrada ? 'desde las ' + horas.hora_entrada : '—') : duracion(horas.horas);
-  const a = $('avisoHoras');
-  if (horas.estado === 'en_curso' && horas.hora_entrada && !horas.hora_salida) {
-    a.className = 'aviso curso'; a.textContent = 'JORNADA EN CURSO · al terminar pulsa "Salgo ahora" y después "Enviar"';
-  } else a.className = 'aviso oculto';
+  if (horas.estado !== 'enviado') $('hHoras').disabled = ausente;
+  $('avisoHoras').className = 'aviso oculto';
 }
 async function guardarHorasLocal() {
   if (horas.estado === 'nuevo') { horas.estado = 'en_curso'; horas.creado_movil = new Date().toISOString(); }
@@ -994,25 +997,14 @@ function gpsUnaVez() {
     if (horas === h) BD.guardarParte(h).catch(() => {});
   }, () => {}, { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
 }
-['hFecha', 'hEntrada', 'hSalida', 'hDescanso', 'hVacaciones', 'hBaja'].forEach(id => $(id).addEventListener('change', () => {
+['hFecha', 'hHoras', 'hVacaciones', 'hBaja'].forEach(id => $(id).addEventListener('change', () => {
   if (id === 'hVacaciones' && $('hVacaciones').checked) $('hBaja').checked = false;
   if (id === 'hBaja' && $('hBaja').checked) $('hVacaciones').checked = false;
   pintarHoras(); if (horas.estado !== 'nuevo') guardarHorasLocal();
 }));
-$('hDescanso').addEventListener('input', pintarHoras);
-$('hEntrarYa').addEventListener('click', async () => {
-  if ($('hEntrada').value && !confirm('Ya tienes hora de entrada (' + $('hEntrada').value + '). ¿Cambiarla por la hora actual?')) return;
-  $('hEntrada').value = horaAhora(); pintarHoras(); await guardarHorasLocal(); gpsUnaVez();
-  toast('▶ Entrada apuntada a las ' + horas.hora_entrada);
-});
-$('hSalirYa').addEventListener('click', async () => {
-  if (!$('hEntrada').value) return toast('Primero apunta la hora de entrada');
-  $('hSalida').value = horaAhora(); pintarHoras(); await guardarHorasLocal();
-  toast('■ Salida apuntada a las ' + horas.hora_salida + ' · ' + duracion(+horas.horas || 0));
-});
 $('hGuardar').addEventListener('click', async () => {
   leerHoras();
-  if (horas.estado === 'nuevo' && !horas.hora_entrada && !horas.vacaciones && !horas.baja_medica) { irInicio(); return; }
+  if (horas.estado === 'nuevo' && !horas.horas && !horas.vacaciones && !horas.baja_medica) { irInicio(); return; }
   await guardarHorasLocal(); irInicio(); toast('Guardado. Envíalo cuando termines la jornada.');
 });
 $('hEnviar').addEventListener('click', async () => {
@@ -1020,13 +1012,13 @@ $('hEnviar').addEventListener('click', async () => {
   if (!horas.fecha) return toast('Falta la fecha');
   if (horas.fecha > hoy()) return toast('La fecha no puede ser posterior a hoy');
   if (!horas.vacaciones && !horas.baja_medica) {
-    if (!horas.hora_entrada || !horas.hora_salida) return toast('Falta la hora de entrada o la de salida');
-    if (!(horas.horas > 0)) return toast('Las horas trabajadas salen a 0. Revisa las horas y el descanso.');
+    if (!(horas.horas > 0)) return toast('Pon las horas trabajadas');
     if (horas.horas > 16 && !confirm('Salen ' + duracion(horas.horas) + '. ¿Es correcto?')) return;
   }
   const otras = (await BD.partes()).filter(p => p.tipo === 'horas' && p.fecha === horas.fecha && p.id !== horas.id);
   if (otras.length && !confirm('Ya tienes otra jornada apuntada el ' + fechaES(horas.fecha) + '. ¿Enviar también esta?')) return;
   if (!horas.creado_movil) horas.creado_movil = new Date().toISOString();
+  if (!horas.gps) gpsUnaVez();
   horas.estado = 'pendiente'; delete horas.error;
   await BD.guardarParte(horas);
   irInicio();
@@ -1040,7 +1032,7 @@ $('hBorrar').addEventListener('click', async () => {
   irInicio(); toast('Horas borradas');
 });
 async function salirHoras() {
-  if (horas.estado === 'nuevo') { leerHoras(); if ((horas.hora_entrada || horas.vacaciones || horas.baja_medica) && !confirm('No has guardado. ¿Salir sin guardar?')) return; }
+  if (horas.estado === 'nuevo') { leerHoras(); if ((horas.horas || horas.vacaciones || horas.baja_medica) && !confirm('No has guardado. ¿Salir sin guardar?')) return; }
   else if (horas.estado !== 'enviado') { leerHoras(); await BD.guardarParte(horas); }
   irInicio();
 }
