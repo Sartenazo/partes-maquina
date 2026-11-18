@@ -211,7 +211,9 @@
       id: p.id, tipo: p.tipo || 'maquina', fecha: p.fecha, hora_inicio: p.hora_inicio || '', hora_fin: p.hora_fin || '',
       id_empresa: p.id_empresa, empresa: p.empresa, clase: p.clase || '', faena: p.faena || '',
       maquina: '', kilos: p.kilos === '' || p.kilos == null ? '' : p.kilos,
-      observaciones: p.observaciones || '',
+      kilos_transportados: p.kilos_transportados === '' || p.kilos_transportados == null ? '' : p.kilos_transportados,
+      observaciones: (p.observaciones || '') + (p.kilos_transportados !== '' && p.kilos_transportados != null && (p.tipo === 'vendimiadora' || p.tipo === 'cosechadora')
+        ? (p.observaciones ? ' · ' : '') + 'Kilos transportados: ' + p.kilos_transportados : ''),
       lat: p.gps ? p.gps.lat : '', lon: p.gps ? p.gps.lon : '',
       gps_precision_m: p.gps ? p.gps.precision : '', gps_fecha: p.gps ? p.gps.fecha : '',
       creado_movil: p.creado_movil,

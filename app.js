@@ -17,8 +17,8 @@ let sesion = null, cat = null, parte = null, horas = null, gpsWatch = null, inst
 // unidad: unidad por defecto de cada parcela (null = la última usada) · kilos: texto del total
 const TIPOS = {
   maquina:      { nombre: 'Trabajos con máquinas', corto: 'Máquina', icono: '🚜', maquina: true, unidad: null, kilos: 'Kilos transportados' },
-  vendimiadora: { nombre: 'Vendimiadora', corto: 'Vendimiadora', icono: '🍇', unidad: 'Kilos', kilos: 'Kilos transportados' },
-  cosechadora:  { nombre: 'Cosechadora', corto: 'Cosechadora', icono: '🌾', cereal: true, unidad: 'Kilos', kilos: 'Kilos transportados' }
+  vendimiadora: { nombre: 'Vendimiadora', corto: 'Vendimiadora', icono: '🍇', unidad: 'Kilos', kilos: 'Kilos vendimiados' },
+  cosechadora:  { nombre: 'Cosechadora', corto: 'Cosechadora', icono: '🌾', cereal: true, unidad: 'Kilos', kilos: 'Kilos cosechados' }
 };
 const PROXIMOS = [['🧪', 'Tratamientos'], ['🤝', 'Trabajos a terceros']];
 const tipoDe = p => TIPOS[(p && p.tipo) || 'maquina'] || TIPOS.maquina;
@@ -226,10 +226,10 @@ function recalcular() {
   // Kilos transportados: se escriben a mano. En Vendimiadora y Cosechadora, si se dejan en blanco,
   // valen la suma de las parcelas apuntadas en Kilos.
   const suma = r2(parte.lineas.reduce((s, l) => s + (esKilos(l.unidad) ? (+l.cantidad || 0) : 0), 0));
-  const v = $('pKilos').value;
-  if (v !== '') parte.kilos = r2(Math.max(0, +v || 0));
-  else parte.kilos = tipoDe(parte).maquina ? '' : suma;
-  $('pKilos').placeholder = !tipoDe(parte).maquina && suma ? fmt(suma) + ' (suma de las parcelas)' : '0';
+  const v = $('pKilos').value, kt = v === '' ? '' : r2(Math.max(0, +v || 0));
+  if (tipoDe(parte).maquina) parte.kilos = kt;                       // Máquina: los kilos son los transportados
+  else { parte.kilos = suma; parte.kilos_transportados = kt; }      // Vendimiadora/Cosechadora: suma de parcelas + transportados aparte
+  $('pKilos').placeholder = '0';
   $('kilosSuma').textContent = fmt(parte.kilos || 0) + ' kg';
 }
 let reloj = null;
@@ -248,12 +248,12 @@ function abrirParte(p) {
   $('bloqueMaquina').classList.toggle('oculto', !t.maquina);
   $('bloqueCereal').classList.toggle('oculto', !t.cereal);
   $('kilosTxt').textContent = t.kilos;
-  $('kilosAuto').classList.add('oculto'); $('kilosNota').classList.add('oculto');
+  // Vendimiadora/Cosechadora: arriba los kilos vendimiados/cosechados (suma de parcelas) y debajo los transportados (a mano)
+  $('kilosAuto').classList.toggle('oculto', !!t.maquina); $('kilosNota').classList.toggle('oculto', !!t.maquina);
   $('kilosManual').classList.remove('oculto');
-  $('kilosManualTxt').textContent = t.kilos || 'Kilos transportados';
-  const sumaK = r2((parte.lineas || []).reduce((s, l) => s + (esKilos(l.unidad) ? (+l.cantidad || 0) : 0), 0));
-  // se muestra lo escrito; si coincide con la suma automática (o está vacío) se deja en blanco para que siga sumando
-  $('pKilos').value = parte.kilos !== '' && parte.kilos != null && +parte.kilos > 0 && (t.maquina || +parte.kilos !== sumaK) ? parte.kilos : '';
+  $('kilosManualTxt').textContent = 'Kilos transportados';
+  const kt = t.maquina ? parte.kilos : parte.kilos_transportados;
+  $('pKilos').value = kt !== '' && kt != null && +kt > 0 ? kt : '';
   const nuevo = parte.estado === 'nuevo';
   const ro = soloLectura();
   mostrar('vParte', nuevo ? 'Nuevo parte' : ro ? 'Parte enviado' : parte.estado === 'en_curso' ? 'Parte en curso' : 'Parte terminado',
