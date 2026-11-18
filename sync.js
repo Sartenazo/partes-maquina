@@ -43,7 +43,15 @@
     });
   }
 
-  async function token(forzar) {
+  // Una sola renovación de la sesión a la vez (si dos envíos renuevan a la vez, el segundo falla)
+  let renovando = null;
+  function token(forzar) {
+    if (renovando) return renovando;
+    const pr = tokenReal(forzar);
+    renovando = pr; pr.catch(() => {}).finally(() => { if (renovando === pr) renovando = null; });
+    return pr;
+  }
+  async function tokenReal(forzar) {
     const s = await g.BD.leer('sesion');
     if (!s || s.demo) return s;
     if (!forzar && s.expira - 120000 > Date.now()) return s;
@@ -148,7 +156,7 @@
     enviarPendientes() {
       if (enviando) return enviando;
       enviando = (async () => {
-        const res = { enviados: 0, errores: 0, sinConexion: false };
+        const res = { enviados: 0, errores: 0, sinConexion: false, reintentar: 0 };
         const s = await g.BD.leer('sesion');
         if (!s) return res;
         const pendientes = (await g.BD.partes()).filter(p => p.estado === 'pendiente' || p.estado === 'error');
@@ -166,8 +174,13 @@
             p.estado = 'enviado'; p.enviado = new Date().toISOString(); delete p.error;
             await g.BD.guardarParte(p);
             res.enviados++;
+            if (!s.demo) g.Sync.borrarBorrador(p.id).catch(() => {});   // la copia del parte en curso ya no hace falta
           } catch (e) {
             if (e instanceof TypeError || !e.status) { res.sinConexion = true; break; } // sin red
+            // fallos pasajeros (servidor despertando, sesión renovándose...): se queda pendiente y se reintenta solo
+            if (e.status >= 500 || e.status === 408 || e.status === 429 || /token|jwt|sesi[oó]n|refresh/i.test(e.message || '')) {
+              res.reintentar++; continue;
+            }
             p.estado = 'error'; p.error = e.message;
             await g.BD.guardarParte(p);
             res.errores++;

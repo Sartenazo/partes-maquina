@@ -310,7 +310,7 @@ function pintarSel() {
       `<li data-id="${p.id_parcela}" class="${apunt.has(String(p.id_parcela)) ? 'marcado' : ''}"><div class="txt"><b>${esc(nombreParcela(p))}</b>
         <span>${esc(p.paraje || '')}${p.tipo_cultivo ? ' · ' + esc(p.tipo_cultivo) : ''}${p.superficie ? ' · ' + fmt(p.superficie) + ' ha' : ''}${apunt.has(String(p.id_parcela)) ? ' · ya apuntada' : ''}</span></div></li>`
     ).join('') + (items.length ? '' : '<li class="vacio">Ninguna parcela coincide con la búsqueda</li>') +
-      `<li data-id="__otra" class="otra"><div class="txt"><b>📍 No está en la lista</b><span>Se guarda el GPS y en la oficina se busca en el Catastro</span></div></li>`;
+      `<li data-id="__otra" class="otra"><div class="txt"><b>📍 No está en la lista</b><span>Se busca con el GPS dónde estás (Catastro)</span></div></li>`;
     return;
   }
   const actual = { empresas: parte.empresa, faenas: parte.faena, clases: parte.clase, cereales: parte.cereal }[selActual];
@@ -325,7 +325,7 @@ $('selLista').addEventListener('click', e => {
   const li = e.target.closest('li[data-id]'); if (!li) return;
   if (selActual === 'parcelas') {
     cerrarDlg('dlgSelector');
-    if (li.dataset.id === '__otra') { $('formOtraParcela').reset(); abrirDlg('dlgParcela'); return; }
+    if (li.dataset.id === '__otra') return parcelaPorGps();
     return empezarEn(li.dataset.id);
   }
   const x = cat[selActual].find(i => String(i.id) === li.dataset.id);
@@ -363,6 +363,17 @@ function pintarActiva() {
   const t = l.tramos[l.tramos.length - 1];
   $('activaNombre').textContent = '⏱ Trabajando en ' + nombreParcela(l) + (l.paraje ? ' · ' + l.paraje : '');
   $('activaTiempo').textContent = 'desde las ' + hhmm(t.inicio) + ' · ' + duracion(horasLinea(l)) + ' en esta parcela';
+  const bi = $('activaBusca'); let txt = '';
+  if (l.id_parcela == null) {
+    if (l._busca === 'gps' || (l.lat == null && l._busca !== 'sinGps')) txt = '📍 Buscando dónde estás con el GPS…';
+    else if (l._busca === 'sinGps') txt = '⚠ No se pudo tomar el GPS. Sal a cielo abierto y pulsa "Volver aquí"; si no, se buscará en la oficina.';
+    else if (l._busca === 'catastro') txt = '🔎 Buscando la parcela en el Catastro…';
+    else if (l.catastro) txt = '✔ Catastro: ' + [l.poligono ? 'Pol. ' + l.poligono + ' · Parc. ' + l.parcela : '', l.paraje, l.catastro.municipio,
+                                l.superficie ? fmt(l.superficie) + ' ha' : '', l.tipo_cultivo].filter(Boolean).join(' · ');
+    else if (!navigator.onLine) txt = '📶 Sin cobertura: se buscará en el Catastro al volver la conexión.';
+    else txt = '⚠ No se encontró en el Catastro con este GPS. En la oficina se revisará con la ubicación guardada.';
+  }
+  bi.textContent = txt; bi.classList.toggle('oculto', !txt);
 }
 
 function pintarParcelas() {
@@ -450,14 +461,17 @@ async function empezarEn(clave, yaPreguntado) {
 // GPS de la parcela: la primera vez que se empieza en ella
 function ubicarLinea(l) {
   if (l.lat != null || !('geolocation' in navigator)) return;
+  if (l.id_parcela == null) { l._busca = 'gps'; pintarActiva(); }
   navigator.geolocation.getCurrentPosition(pos => {
     l.lat = pos.coords.latitude; l.lon = pos.coords.longitude; l.precision = pos.coords.accuracy;
+    if (l.id_parcela == null) l._busca = navigator.onLine ? 'catastro' : '';
     if (!parte.gps) parte.gps = { lat: l.lat, lon: l.lon, precision: l.precision, fecha: new Date(pos.timestamp).toISOString() };
     if (parte && parte.lineas.includes(l)) {
       pintarParcelas(); pintarGps(); autoguardar(true);
       if (l.id_parcela == null) completarConCatastro(l, true); else comprobarCatastro(l);
     }
-  }, () => toast('No se pudo tomar la ubicación de la parcela'), { enableHighAccuracy: true, timeout: 20000, maximumAge: 15000 });
+  }, () => { if (l.id_parcela == null) { l._busca = 'sinGps'; if (parte && parte.lineas.includes(l)) pintarActiva(); }
+             toast('No se pudo tomar la ubicación de la parcela'); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 15000 });
 }
 function parar() { abrirTerminar({}); }
 
@@ -601,6 +615,17 @@ $('listaParcelas').addEventListener('input', e => {
   if (l) { l.cantidad = num(e.target.value); if (esHoras(l.unidad)) l.cantidad_auto = false; recalcular(); }
 });
 
+// Parcela que no está en la lista: se empieza ya y se identifica con el GPS + Catastro
+async function parcelaPorGps() {
+  const ult = (await BD.leer('ultimosValores')) || {};
+  const l = {
+    id: uuid(), id_parcela: null, poligono: '', parcela: '', paraje: '', tipo_cultivo: '', superficie: null, sigpac: '',
+    cantidad: '', unidad: tipoDe(parte).unidad || ult.unidad || 'Hectareas', observaciones: 'Parcela añadida a mano en el móvil',
+    lat: null, lon: null, precision: null, tramos: [], tipo_cereal: parte.cereal || '', cereal: parte.riego || '', _busca: 'gps'
+  };
+  parte.lineas.push(l);
+  empezarEn(claveLinea(l));
+}
 $('formOtraParcela').addEventListener('submit', async e => {
   e.preventDefault();
   const ult = (await BD.leer('ultimosValores')) || {};
@@ -650,7 +675,10 @@ async function consultarCatastro(lat, lon) {
 // Parcela añadida a mano: rellenar con el Catastro y, si ya existe en la lista de la empresa, enlazarla
 async function completarConCatastro(l, avisar) {
   if (l.id_parcela != null || l.catastro || l.lat == null) return;
-  const c = await consultarCatastro(l.lat, l.lon); if (!c || !parte) return;
+  const c = await consultarCatastro(l.lat, l.lon);
+  l._busca = '';
+  if (!c) { if (parte && parte.lineas.includes(l)) pintarActiva(); return; }
+  if (!parte) return;
   l.catastro = { rc: c.rc, municipio: c.municipio, cp: c.cp, cm: c.cm, ldt: c.ldt };
   if (c.poligono) { l.poligono = c.poligono; l.parcela = c.parcela; }
   if (!l.paraje) l.paraje = c.paraje;
@@ -666,7 +694,7 @@ async function completarConCatastro(l, avisar) {
   } else if (avisar) {
     toast('📍 Catastro: ' + nombreParcela(l) + (l.paraje ? ' · ' + l.paraje : '') + (l.superficie ? ' · ' + fmt(l.superficie) + ' ha' : ''), 4500);
   }
-  recalcular(); if (parte && parte.lineas.includes(l)) { pintarParcelas(); autoguardar(true); }
+  if (parte && parte.lineas.includes(l)) { recalcular(); pintarParcelas(); autoguardar(true); }
 }
 // Parcela de la lista: comprobar que el GPS cae en ella
 async function comprobarCatastro(l) {
@@ -735,7 +763,9 @@ function autoguardar(yaMismo) {
   clearTimeout(tAuto);
   tAuto = setTimeout(async () => {
     if (!parte) return;
-    const copia = JSON.parse(JSON.stringify(parte, (k, v) => (k === '_editHoras' ? undefined : v))); if (copia.gps) delete copia.gps._viejo;
+    const copia = JSON.parse(JSON.stringify(parte, (k, v) => (k === '_editHoras' || k === '_busca' ? undefined : v))); if (copia.gps) delete copia.gps._viejo;
+    const enBD = await BD.parte(copia.id);
+    if (enBD && enBD.estado !== 'en_curso' && enBD.estado !== 'nuevo' && copia.estado === 'en_curso') return;   // ya terminado: no pisarlo
     await BD.guardarParte(copia);
     if (copia.estado === 'en_curso' && navigator.onLine) Sync.guardarBorrador(copia).catch(() => {});
   }, yaMismo ? 0 : 800);
@@ -791,6 +821,7 @@ $('btnTerminar').addEventListener('click', async () => {
     await Promise.race([catastroPendiente(), new Promise(r => setTimeout(r, 10000))]);
   }
   const ahora = new Date().toISOString();
+  clearTimeout(tAuto);
   parte.activa = null;
   recalcular();
   if (parte.lineas.some(l => l.cantidad === '') && !confirm('Hay parcelas sin cantidad. ¿Enviar igualmente?')) return;
@@ -803,6 +834,8 @@ $('btnTerminar').addEventListener('click', async () => {
   for (const l of parte.lineas) if (l.lat == null && parte.gps && l.id_parcela == null) { l.lat = parte.gps.lat; l.lon = parte.gps.lon; }
   if (!parte.creado_movil) parte.creado_movil = ahora;
   parte.estado = 'pendiente'; delete parte.error;
+  clearTimeout(tAuto);
+  for (const l of parte.lineas) delete l._busca;
   await BD.guardarParte(parte);
   await recordarValores();
   irInicio();
@@ -834,6 +867,7 @@ async function enviar(silencioso) {
   if (silencioso) return;
   if (r.enviados) toast(r.enviados === 1 ? '✔ Parte enviado a la oficina' : `✔ ${r.enviados} partes enviados a la oficina`);
   else if (r.errores) toast('No se pudo enviar algún parte. Ábrelo para ver el motivo.', 4000);
+  else if (r.reintentar) toast('La oficina no responde ahora mismo. El parte se enviará solo en un momento.', 4000);
 }
 async function pedirEnvioSegundoPlano() {
   try { const reg = await navigator.serviceWorker.ready; if (reg.sync) await reg.sync.register('enviar-partes'); } catch (e) {}
