@@ -138,15 +138,18 @@
       if (s && s.demo) return g.BD.leer('catalogos');
       return conToken(async tk => {
         // clases = Máquina (Claseequipamiento) · faenas = Tipo Trabajo (Clasefaena)
-        const [empresas, parcelas, faenas, clases, unidades, cereales] = await Promise.all([
+        const [empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas] = await Promise.all([
           leerTabla('cat_empresas', tk, 'nombre'),
           leerTabla('cat_parcelas', tk, 'poligono,parcela'),
           leerTabla('cat_faenas', tk, 'nombre'),
           leerTabla('cat_clases', tk, 'nombre'),
           leerTabla('cat_unidades', tk, 'id'),
-          leerTabla('cat_cereales', tk, 'nombre').catch(() => [])
+          leerTabla('cat_cereales', tk, 'nombre').catch(() => []),
+          leerTabla('cat_productos', tk, 'nombre').catch(() => []),
+          leerTabla('cat_tareas', tk, 'nombre').catch(() => []),
+          leerTabla('cat_maquinas', tk, 'nombre').catch(() => [])
         ]);
-        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, fecha: new Date().toISOString() };
+        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, fecha: new Date().toISOString() };
         await g.BD.guardar('catalogos', cat);
         return cat;
       });
@@ -210,7 +213,10 @@
     return {
       id: p.id, tipo: p.tipo || 'maquina', fecha: p.fecha, hora_inicio: p.hora_inicio || '', hora_fin: p.hora_fin || '',
       id_empresa: p.id_empresa, empresa: p.empresa, clase: p.clase || '', faena: p.faena || '',
-      maquina: '', kilos: p.kilos === '' || p.kilos == null ? '' : p.kilos,
+      maquina: p.maquina || '', kilos: p.kilos === '' || p.kilos == null ? '' : p.kilos,
+      problema: p.problema || '',
+      productos: (p.productos || []).map((x, i) => ({ orden: i + 1, id_producto: x.id_producto == null ? '' : x.id_producto,
+        producto: x.producto, registro: x.registro || '', dosis_ha: x.dosis_ha === '' || x.dosis_ha == null ? '' : x.dosis_ha })),
       observaciones: p.observaciones || '',
       lat: p.gps ? p.gps.lat : '', lon: p.gps ? p.gps.lon : '',
       gps_precision_m: p.gps ? p.gps.precision : '', gps_fecha: p.gps ? p.gps.fecha : '',

@@ -90,6 +90,13 @@
         <label>Tipo Trabajo *</label>
         <button type="button" class="selector" id="pFaena" data-lista="faenas">Elegir tipo de trabajo…</button>
       </div>
+      <div id="bloqueTrat" class="oculto">
+        <label>Tipo de tarea *</label>
+        <button type="button" class="selector" id="pTarea" data-lista="tareas">Elegir tipo de tarea…</button>
+        <label>Equipo</label>
+        <button type="button" class="selector" id="pEquipo" data-lista="equipos">Elegir equipo…</button>
+        <label>Problema fitosanitario<input id="pProblema" maxlength="50" placeholder="Opcional (mildiu, oídio, malas hierbas…)"></label>
+      </div>
       <div id="bloqueCereal" class="oculto">
         <label>Cereal *</label>
         <button type="button" class="selector" id="pCereal" data-lista="cereales">Elegir cereal…</button>
@@ -98,6 +105,13 @@
           <button type="button" class="secundario" data-riego="Cereal riego">Riego</button>
         </div>
       </div>
+    </div>
+
+    <div class="tarjeta oculto" id="tarjetaProductos">
+      <div class="cabecera-seccion"><h3>Productos</h3></div>
+      <ul id="listaProductos" class="lista productos"></ul>
+      <button type="button" class="secundario" id="btnAddProducto">＋ Añadir producto</button>
+      <p class="nota">Pon la <b>dosis por hectárea</b> (litros o kilos). Los productos valen para todas las parcelas de este parte; en la oficina se calcula la cantidad de cada parcela.</p>
     </div>
 
     <div class="tarjeta">
@@ -115,9 +129,11 @@
     </div>
 
     <div class="tarjeta">
+      <div id="bloqueKilos">
       <div class="kilos" id="kilosAuto"><span id="kilosTxt">Kilos transportados</span><b id="kilosSuma">0 kg</b></div>
       <p class="nota" id="kilosNota">Se suman solos: es el total de las parcelas apuntadas en <b>Kilos</b>.</p>
       <label id="kilosManual" class="oculto"><span id="kilosManualTxt">Kilos transportados</span><input id="pKilos" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+      </div>
       <label>Observaciones<textarea id="pObs" rows="3" maxlength="200"></textarea></label>
     </div>
 
