@@ -316,7 +316,7 @@ document.querySelectorAll('.selector').forEach(b => b.addEventListener('click', 
 function abrirSelector(lista) {
   selActual = lista;
   $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea',
-    equipos: 'Equipo', productos: 'Producto', parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
+    equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
   $('selBuscar').value = '';
   pintarSel();
   abrirDlg('dlgSelector');
@@ -338,7 +338,8 @@ function pintarSel() {
   const yaProd = new Set((parte.productos || []).map(x => String(x.id_producto)));
   const items = listaCat(selActual).filter(x => !q || normal(x.nombre + ' ' + (x.cif || '') + ' ' + (x.registro || '')).includes(q));
   const sub = x => selActual === 'productos'
-    ? [x.registro ? 'Reg. ' + x.registro : '', x.dosis ? 'Dosis ' + fmt(x.dosis) + '/ha' : '', yaProd.has(String(x.id)) ? 'ya añadido' : ''].filter(Boolean).join(' · ')
+    ? [x.registro ? 'Reg. ' + x.registro : '', x.dosis ? fmt(x.dosis) + ' L/ha' : '', yaProd.has(String(x.id)) ? 'ya añadido' : ''].filter(Boolean).join(' · ')
+    : selActual === 'fichas' ? (x.registro ? '📄 Reg. ' + x.registro : 'Sin nº de registro (no hay ficha oficial)')
     : (x.localidad || '');
   $('selLista').innerHTML = items.length ? items.map(x =>
     `<li data-id="${x.id}" class="${x.nombre === actual || (selActual === 'productos' && yaProd.has(String(x.id))) ? 'marcado' : ''}"><div class="txt"><b>${esc(x.nombre)}</b>${sub(x) ? `<span>${esc(sub(x))}</span>` : ''}</div></li>`
@@ -354,6 +355,7 @@ $('selLista').addEventListener('click', e => {
     return empezarEn(li.dataset.id);
   }
   const x = listaCat(selActual).find(i => String(i.id) === li.dataset.id);
+  if (selActual === 'fichas') { cerrarDlg('dlgSelector'); return abrirFicha(x.registro, x.nombre); }
   if (selActual === 'productos') {
     if (parte.productos.some(pr => String(pr.id_producto) === String(x.id))) { cerrarDlg('dlgSelector'); return toast('Ese producto ya está en el parte'); }
     parte.productos.push({ id_producto: x.id, producto: x.nombre, registro: x.registro || '', dosis_ha: x.dosis ? +x.dosis : '' });
@@ -383,7 +385,17 @@ $('selLista').addEventListener('click', e => {
   autoguardar();
 });
 // listas del selector (equipos = tabla Maquinaria)
-function listaCat(lista) { return ((cat || {})[{ equipos: 'maquinas' }[lista] || lista]) || []; }
+function listaCat(lista) { return ((cat || {})[{ equipos: 'maquinas', fichas: 'productos' }[lista] || lista]) || []; }
+
+// --- ficha oficial (Registro de Productos Fitosanitarios del Ministerio) ---
+const URL_REGFI = 'https://servicio.mapa.gob.es/regfiweb/Productos/Index';
+function abrirFicha(registro, nombre) {
+  registro = String(registro || '').trim();
+  if (!registro) return toast((nombre ? nombre + ': ' : '') + 'sin nº de registro, no hay ficha oficial', 3500);
+  try { navigator.clipboard && navigator.clipboard.writeText(registro).catch(() => {}); } catch (e) {}
+  window.open(URL_REGFI, '_blank', 'noopener');
+  toast('Nº de registro ' + registro + ' copiado: pégalo en el buscador del Ministerio', 5000);
+}
 
 // --- productos del tratamiento (los mismos para todas las parcelas del parte) ---
 function haParte() { return parte.lineas.reduce((s, l) => s + (/^hect/i.test(l.unidad || '') ? (+l.cantidad || 0) : (+l.superficie || 0)), 0); }
@@ -391,13 +403,15 @@ function pintarProductos() {
   if (!tipoDe(parte).tratamiento) return;
   const ro = soloLectura(), ha = haParte();
   $('listaProductos').innerHTML = parte.productos.map((p, i) => `<li data-i="${i}">
-    <div class="txt"><b>${esc(p.producto)}</b><span>${p.registro ? 'Reg. ' + esc(p.registro) : 'Sin nº de registro'}${p.dosis_ha && ha ? ' · ≈ ' + fmt(Math.round(p.dosis_ha * ha * 100) / 100) + ' L/kg en total (' + fmt(Math.round(ha * 100) / 100) + ' ha)' : ''}</span></div>
-    <label class="dosis">Dosis/ha<input type="number" inputmode="decimal" step="any" min="0" placeholder="L o kg" value="${esc(p.dosis_ha)}" data-campo="dosis" ${ro ? 'disabled' : ''}></label>
+    <div class="txt"><b>${esc(p.producto)}</b><span>${p.registro ? 'Reg. ' + esc(p.registro) : 'Sin nº de registro'}${p.dosis_ha && ha ? ' · ≈ ' + fmt(Math.round(p.dosis_ha * ha * 100) / 100) + ' L en total (' + fmt(Math.round(ha * 100) / 100) + ' ha)' : ''}</span></div>
+    <label class="dosis">Litros/ha<input type="number" inputmode="decimal" step="any" min="0" placeholder="L/ha" value="${esc(p.dosis_ha)}" data-campo="dosis" ${ro ? 'disabled' : ''}></label>
+    ${p.registro ? '<button type="button" class="ficha" data-accion="fichaProd" aria-label="Ver ficha oficial">📄 Ficha</button>' : ''}
     ${ro ? '' : '<button type="button" class="quitar" data-accion="quitarProd" aria-label="Quitar producto">✕</button>'}</li>`).join('') ||
     `<li class="vacio">${ro ? 'Sin productos.' : 'Añade los productos que llevas en la cuba (puedes hacerlo en el almacén, antes de salir).'}</li>`;
   $('btnAddProducto').classList.toggle('oculto', ro);
 }
 $('btnAddProducto').addEventListener('click', () => abrirSelector('productos'));
+$('btnFichaProducto').addEventListener('click', () => abrirSelector('fichas'));
 $('listaProductos').addEventListener('change', e => {
   if (e.target.dataset.campo !== 'dosis') return;
   const p = parte.productos[+e.target.closest('li').dataset.i]; if (!p) return;
@@ -405,6 +419,8 @@ $('listaProductos').addEventListener('change', e => {
   pintarProductos(); autoguardar();
 });
 $('listaProductos').addEventListener('click', e => {
+  const f = e.target.closest('[data-accion="fichaProd"]');
+  if (f) { const pf = parte.productos[+f.closest('li').dataset.i]; return abrirFicha(pf.registro, pf.producto); }
   const b = e.target.closest('[data-accion="quitarProd"]'); if (!b) return;
   const i = +b.closest('li').dataset.i;
   if (!confirm('¿Quitar ' + parte.productos[i].producto + ' del parte?')) return;
@@ -904,7 +920,7 @@ $('btnTerminar').addEventListener('click', async () => {
   recalcular();
   if (parte.lineas.some(l => l.cantidad === '') && !confirm('Hay parcelas sin cantidad. ¿Enviar igualmente?')) return;
   if (tipoDe(parte).tratamiento && parte.productos.some(p => p.dosis_ha === '' || p.dosis_ha == null) &&
-      !confirm('Hay productos sin dosis por hectárea. ¿Enviar igualmente?')) return;
+      !confirm('Hay productos sin litros por hectárea. ¿Enviar igualmente?')) return;
   if (enCurso()) {
     parte.hora_inicio = primeraHora(parte) || hhmm(parte.creado_movil || ahora);
     parte.hora_fin = hhmm(ahora);
