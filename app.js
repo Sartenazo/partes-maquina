@@ -230,9 +230,11 @@ function recalcular() {
   // valen la suma de las parcelas apuntadas en Kilos.
   const suma = r2(parte.lineas.reduce((s, l) => s + (esKilos(l.unidad) ? (+l.cantidad || 0) : 0), 0));
   const v = $('pKilos').value, kt = v === '' ? '' : r2(Math.max(0, +v || 0));
-  parte.kilos = kt;                 // "Kilos" del parte (Access) = kilos transportados, escritos a mano
+  const sumaLin = r2(parte.lineas.reduce((s, l) => s + (+l.kilos || 0), 0));
+  parte.kilos_mano = kt;
+  parte.kilos = kt === '' && tipoDe(parte).maquina && sumaLin ? sumaLin : kt;   // Máquina: en blanco = suma de los kilos de las parcelas
   parte.kilos_parcelas = suma;      // Vendimiadora/Cosechadora: lo vendimiado/cosechado (suma de parcelas), solo para ver
-  $('pKilos').placeholder = '0';
+  $('pKilos').placeholder = tipoDe(parte).maquina && sumaLin ? fmt(sumaLin) + ' (suma de las parcelas)' : '0';
   $('kilosSuma').textContent = fmt(parte.kilos_parcelas || 0) + ' kg';
   if (tipoDe(parte).tratamiento && !document.activeElement.closest?.('#listaProductos')) pintarProductos();
 }
@@ -261,7 +263,7 @@ function abrirParte(p) {
   $('kilosAuto').classList.toggle('oculto', !!t.maquina); $('kilosNota').classList.toggle('oculto', !!t.maquina);
   $('kilosManual').classList.remove('oculto');
   $('kilosManualTxt').textContent = 'Kilos transportados';
-  const kt = parte.kilos_transportados != null && parte.kilos_transportados !== '' && !t.maquina ? parte.kilos_transportados : parte.kilos;
+  const kt = parte.kilos_mano !== undefined ? parte.kilos_mano : (parte.kilos_transportados != null && parte.kilos_transportados !== '' && !t.maquina ? parte.kilos_transportados : parte.kilos);
   $('pKilos').value = kt !== '' && kt != null && +kt > 0 ? kt : '';
   const nuevo = parte.estado === 'nuevo';
   const ro = soloLectura();
@@ -476,6 +478,7 @@ function htmlParcela(p, linea) {
     <div class="cant">
       <input type="number" inputmode="decimal" step="any" min="0" placeholder="${esHoras(linea.unidad) ? 'Horas' : 'Cantidad'}" value="${esc(linea.cantidad)}" data-campo="cantidad" ${ro ? 'disabled' : ''}>
       <select data-campo="unidad" ${ro ? 'disabled' : ''}>${unidades}</select></div>
+    ${tipoDe(parte).maquina ? `<label class="kilos-linea">Kilos de esta parcela<input type="number" inputmode="decimal" step="any" min="0" placeholder="0" value="${esc(linea.kilos == null ? '' : linea.kilos)}" data-campo="kilos" ${ro ? 'disabled' : ''}></label>` : ''}
     ${tieneMapa(linea) ? `<div class="mapas">
       <button type="button" data-accion="mapaCat">🗺 Mapa Catastro</button>
       <button type="button" data-accion="mapaGoogle">📍 Google Maps</button></div>` : ''}
@@ -672,6 +675,8 @@ $('listaParcelas').addEventListener('change', e => {
     else if (/^hect/i.test(l.unidad) && (l.cantidad === '' || l.cantidad_auto) && l.superficie) { l.cantidad = num(l.superficie); l.cantidad_auto = false; }
     else if (l.cantidad_auto) { l.cantidad = ''; l.cantidad_auto = false; }
     if (tipoDe(parte).maquina) BD.leer('ultimosValores').then(u => BD.guardar('ultimosValores', Object.assign(u || {}, { unidad: l.unidad })));
+  } else if (e.target.dataset.campo === 'kilos') {
+    l.kilos = e.target.value === '' ? '' : Math.max(0, num(e.target.value));
   } else {
     l.cantidad = num(e.target.value);
     if (esHoras(l.unidad)) l.cantidad_auto = false;      // horas corregidas a mano

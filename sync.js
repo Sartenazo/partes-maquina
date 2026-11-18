@@ -227,6 +227,7 @@
         tipo_cultivo: l.tipo_cultivo || '', superficie: l.superficie == null ? '' : l.superficie,
         sigpac: l.sigpac || '', cantidad: l.cantidad === '' || l.cantidad == null ? '' : l.cantidad,
         unidad: l.unidad || '', tipo_cereal: l.tipo_cereal || p.cereal || '', cereal: l.cereal || p.riego || '',
+        kilos: l.kilos === '' || l.kilos == null ? '' : l.kilos,
         observaciones: (l.observaciones || '') + (l.catastro ? ' · Catastro RC ' + l.catastro.rc + (l.catastro.municipio ? ' · ' + l.catastro.municipio : '') : '') +
           (l.aviso_catastro ? ' · AVISO GPS: ' + l.aviso_catastro : ''),
         lat: l.lat == null ? '' : l.lat, lon: l.lon == null ? '' : l.lon,
