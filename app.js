@@ -376,8 +376,10 @@ function pintarActiva() {
   bi.textContent = txt; bi.classList.toggle('oculto', !txt);
 }
 
+const CAJA_ACTIVA = document.getElementById('parcelaActiva');
 function pintarParcelas() {
   const ul = $('listaParcelas');
+  ul.before(CAJA_ACTIVA);                      // sacarla antes de rehacer la lista
   const ro = soloLectura();
   pintarActiva();
   $('btnElegirParcela').classList.toggle('oculto', ro);
@@ -388,6 +390,9 @@ function pintarParcelas() {
   }
   ul.innerHTML = parte.lineas.map(l => htmlParcela(l, l)).join('') ||
     (ro ? '<li class="nota">Sin parcelas.</li>' : '');
+  // el recuadro "Trabajando en…" va justo debajo de la parcela en la que se trabaja
+  const act = ul.querySelector('li.trabajando');
+  if (act) { const h = document.createElement('li'); h.className = 'hueco-activa'; h.appendChild(CAJA_ACTIVA); act.after(h); }
   resumenParcelas();
 }
 function htmlParcela(p, linea) {

@@ -189,3 +189,5 @@ label.check input { width: 24px; height: 24px; min-height: 0; margin: 0; }
 .reloj span { font-size: 22px; font-weight: 700; color: var(--texto, #222); }
 
 .activa .busca { display: block; margin-top: 4px; font-size: 14px; font-weight: 600; }
+
+.parcelas > li.hueco-activa { list-style: none; padding: 0; margin: -4px 0 10px; border: 0; background: none; }
