@@ -355,7 +355,7 @@ $('selLista').addEventListener('click', e => {
     return empezarEn(li.dataset.id);
   }
   const x = listaCat(selActual).find(i => String(i.id) === li.dataset.id);
-  if (selActual === 'fichas') { cerrarDlg('dlgSelector'); return abrirFicha(x.registro, x.nombre); }
+  if (selActual === 'fichas') { cerrarDlg('dlgSelector'); return abrirFicha(x.registro, x.nombre, x.ficha); }
   if (selActual === 'productos') {
     if (parte.productos.some(pr => String(pr.id_producto) === String(x.id))) { cerrarDlg('dlgSelector'); return toast('Ese producto ya está en el parte'); }
     parte.productos.push({ id_producto: x.id, producto: x.nombre, registro: x.registro || '', dosis_ha: x.dosis ? +x.dosis : '' });
@@ -389,8 +389,15 @@ function listaCat(lista) { return ((cat || {})[{ equipos: 'maquinas', fichas: 'p
 
 // --- ficha oficial (Registro de Productos Fitosanitarios del Ministerio) ---
 const URL_REGFI = 'https://servicio.mapa.gob.es/regfiweb/Productos/Index';
-function abrirFicha(registro, nombre) {
+const URL_FICHA = 'https://servicio.mapa.gob.es/regfiweb/Productos/ExportFichaProductoPdfGet?idProducto=';
+function fichaDe(idProducto, registro) {
+  const prods = listaCat('productos');
+  const x = prods.find(p => String(p.id) === String(idProducto)) || prods.find(p => registro && String(p.registro || '').trim() === String(registro).trim());
+  return x && x.ficha ? x.ficha : null;
+}
+function abrirFicha(registro, nombre, ficha) {
   registro = String(registro || '').trim();
+  if (ficha) { window.open(URL_FICHA + encodeURIComponent(ficha), '_blank', 'noopener'); return toast('Abriendo la ficha oficial de ' + (nombre || registro) + '…'); }
   if (!registro) return toast((nombre ? nombre + ': ' : '') + 'sin nº de registro, no hay ficha oficial', 3500);
   try { navigator.clipboard && navigator.clipboard.writeText(registro).catch(() => {}); } catch (e) {}
   window.open(URL_REGFI, '_blank', 'noopener');
@@ -420,7 +427,7 @@ $('listaProductos').addEventListener('change', e => {
 });
 $('listaProductos').addEventListener('click', e => {
   const f = e.target.closest('[data-accion="fichaProd"]');
-  if (f) { const pf = parte.productos[+f.closest('li').dataset.i]; return abrirFicha(pf.registro, pf.producto); }
+  if (f) { const pf = parte.productos[+f.closest('li').dataset.i]; return abrirFicha(pf.registro, pf.producto, fichaDe(pf.id_producto, pf.registro)); }
   const b = e.target.closest('[data-accion="quitarProd"]'); if (!b) return;
   const i = +b.closest('li').dataset.i;
   if (!confirm('¿Quitar ' + parte.productos[i].producto + ' del parte?')) return;
