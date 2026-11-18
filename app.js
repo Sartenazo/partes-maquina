@@ -227,10 +227,10 @@ function recalcular() {
   // valen la suma de las parcelas apuntadas en Kilos.
   const suma = r2(parte.lineas.reduce((s, l) => s + (esKilos(l.unidad) ? (+l.cantidad || 0) : 0), 0));
   const v = $('pKilos').value, kt = v === '' ? '' : r2(Math.max(0, +v || 0));
-  if (tipoDe(parte).maquina) parte.kilos = kt;                       // Máquina: los kilos son los transportados
-  else { parte.kilos = suma; parte.kilos_transportados = kt; }      // Vendimiadora/Cosechadora: suma de parcelas + transportados aparte
+  parte.kilos = kt;                 // "Kilos" del parte (Access) = kilos transportados, escritos a mano
+  parte.kilos_parcelas = suma;      // Vendimiadora/Cosechadora: lo vendimiado/cosechado (suma de parcelas), solo para ver
   $('pKilos').placeholder = '0';
-  $('kilosSuma').textContent = fmt(parte.kilos || 0) + ' kg';
+  $('kilosSuma').textContent = fmt(parte.kilos_parcelas || 0) + ' kg';
 }
 let reloj = null;
 function arrancarReloj() { pararReloj(); reloj = setInterval(() => { if (parte) { recalcular(); pintarActiva(); } }, 30000); }
@@ -252,7 +252,7 @@ function abrirParte(p) {
   $('kilosAuto').classList.toggle('oculto', !!t.maquina); $('kilosNota').classList.toggle('oculto', !!t.maquina);
   $('kilosManual').classList.remove('oculto');
   $('kilosManualTxt').textContent = 'Kilos transportados';
-  const kt = t.maquina ? parte.kilos : parte.kilos_transportados;
+  const kt = parte.kilos_transportados != null && parte.kilos_transportados !== '' && !t.maquina ? parte.kilos_transportados : parte.kilos;
   $('pKilos').value = kt !== '' && kt != null && +kt > 0 ? kt : '';
   const nuevo = parte.estado === 'nuevo';
   const ro = soloLectura();
