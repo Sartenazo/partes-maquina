@@ -1,5 +1,5 @@
 // Service worker: la app funciona sin conexión y envía partes en segundo plano.
-const VERSION = 'partes-maquina-v22';
+const VERSION = 'partes-maquina-v23';
 const ARCHIVOS = ['./', 'index.html', 'styles.css', 'config.js', 'db.js', 'sync.js', 'demo.js', 'app.js',
   'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
@@ -19,7 +19,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
-    fetch(e.request).then(r => {
+    fetch(e.request.url, { cache: 'no-cache' }).then(r => {      // no-cache: siempre pregunta si hay versión nueva
       if (r.ok) { const copia = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copia)); }
       return r;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
