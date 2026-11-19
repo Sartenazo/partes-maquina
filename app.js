@@ -174,7 +174,7 @@ function filaParte(p) {
   const ini = primeraHora(p);
   const t = tipoDe(p);
   const det = t.maquina ? (p.faena || '') + (p.clase ? ' · ' + p.clase : '') : t.cereal ? (p.cereal || '')
-    : t.terceros ? (p.faena || '')
+    : t.terceros ? (p.faena || '') + (p.clase ? ' · ' + p.clase : '')
     : t.tratamiento ? (p.faena || '') + ((p.productos || []).length ? ' · ' + p.productos.length + ' producto' + (p.productos.length === 1 ? '' : 's') : '') : '';
   return `<li data-id="${esc(p.id)}"><div class="txt"><b>${t.icono} ${esc(fechaES(p.fecha))} · ${esc(p.empresa || 'Sin empresa')}</b>
     <span>${esc(t.corto)}${det ? ' · ' + esc(det) : ''} · ${n} parcela${n === 1 ? '' : 's'}${p.estado === 'en_curso' && ini ? ' · desde ' + ini : ''}</span></div>${chip}</li>`;
@@ -201,7 +201,7 @@ async function nuevoParte(tipo) {
   const ult = (await BD.leer('ultimosValores')) || {};
   abrirParte({
     id: uuid(), tipo, estado: 'nuevo', fecha: hoy(), hora_inicio: '', hora_fin: '',
-    id_empresa: null, empresa: '', clase: t.maquina ? (ult.clase || '') : '', faena: '', maquina: t.tratamiento ? (ult.equipo || '') : '',
+    id_empresa: null, empresa: '', clase: t.maquina || t.terceros ? (ult.clase || '') : '', faena: '', maquina: t.tratamiento ? (ult.equipo || '') : '',
     cereal: t.cereal ? (ult.cereal || '') : '', riego: t.cereal ? (ult.riego || '') : '',
     productos: [], problema: '',
     kilos: '', observaciones: '', gps: null, lineas: [], activa: null, creado_movil: null
@@ -276,6 +276,7 @@ function abrirParte(p) {
   $('pObs').value = parte.observaciones || '';
   pintarSelector('pEmpresa', parte.empresa, 'Elegir empresa…');
   pintarSelector('pClase', parte.clase, 'Elegir máquina…');
+  pintarSelector('pClaseT', parte.clase, 'Elegir máquina…');
   pintarSelector('pFaena', parte.faena, 'Elegir tipo de trabajo…');
   pintarSelector('pCereal', parte.cereal, 'Elegir cereal…');
   pintarSelector('pTarea', parte.faena, 'Elegir tipo de tarea…');
@@ -385,7 +386,7 @@ $('selLista').addEventListener('click', e => {
     parte.cereal = x.nombre; pintarSelector('pCereal', x.nombre);
     for (const l of parte.lineas) l.tipo_cereal = x.nombre;
   } else {
-    parte.clase = x.nombre; pintarSelector('pClase', x.nombre);
+    parte.clase = x.nombre; pintarSelector('pClase', x.nombre); pintarSelector('pClaseT', x.nombre);
   }
   cerrarDlg('dlgSelector');
   autoguardar();
@@ -895,7 +896,7 @@ async function recordarValores() {
   const prev = (await BD.leer('ultimosValores')) || {};
   const ultU = parte.lineas.length ? parte.lineas[parte.lineas.length - 1].unidad : undefined;
   const t = tipoDe(parte);
-  await BD.guardar('ultimosValores', Object.assign(prev, t.maquina ? { clase: parte.clase, unidad: ultU || prev.unidad } : t.terceros ? { unidad: ultU || prev.unidad } : {},
+  await BD.guardar('ultimosValores', Object.assign(prev, t.maquina ? { clase: parte.clase, unidad: ultU || prev.unidad } : t.terceros ? { clase: parte.clase, unidad: ultU || prev.unidad } : {},
     t.cereal && parte.cereal ? { cereal: parte.cereal, riego: parte.riego || '' } : {},
     t.tratamiento && parte.maquina ? { equipo: parte.maquina } : {}));
 }
