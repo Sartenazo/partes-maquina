@@ -430,7 +430,6 @@ function pintarProductos() {
   $('btnAddProducto').classList.toggle('oculto', ro);
 }
 $('btnAddProducto').addEventListener('click', () => abrirSelector('productos'));
-$('btnFichaProducto').addEventListener('click', () => abrirSelector('fichas'));
 $('fichaCerrar').addEventListener('click', () => { cerrarDlg('dlgFicha'); $('fichaMarco').src = 'about:blank'; });
 $('listaProductos').addEventListener('change', e => {
   if (e.target.dataset.campo !== 'dosis') return;
