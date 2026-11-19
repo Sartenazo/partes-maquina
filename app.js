@@ -291,7 +291,7 @@ function abrirParte(p) {
   $('parteError').classList.toggle('oculto', parte.estado !== 'error');
   pintarAvisoCurso();
 
-  $('formParte').querySelectorAll('input, select, textarea, button').forEach(el => { if (el.id !== 'gpsMapa') el.disabled = ro; });
+  $('formParte').querySelectorAll('input, select, textarea, button').forEach(el => { if (el.id !== 'gpsMapa' && !el.hasAttribute('data-volver')) el.disabled = ro; });
   $('btnGuardar').classList.toggle('oculto', ro);
   $('btnTerminar').classList.toggle('oculto', ro);
   $('btnTerminar').textContent = enCurso() ? '✔ Terminar y enviar' : '⇪ Enviar';
@@ -981,6 +981,7 @@ $('btnBorrarParte').addEventListener('click', async () => {
   if (navigator.onLine) Sync.borrarBorrador(id).catch(() => {});
   irInicio(); toast('Parte borrado');
 });
+document.querySelectorAll('[data-volver]').forEach(b => b.addEventListener('click', () => $('btnAtras').click()));
 $('btnAtras').addEventListener('click', async () => {
   if (horas) return salirHoras();
   if (parte && parte.estado === 'nuevo' && (parte.id_empresa || parte.lineas.length) &&
@@ -1127,7 +1128,7 @@ function abrirHoras(h) {
   $('hFecha').value = horas.fecha; $('hHoras').value = aHHMM(horas.horas);
   $('hVacaciones').checked = !!horas.vacaciones; $('hBaja').checked = !!horas.baja_medica;
   $('hObs').value = horas.observaciones || '';
-  $('vHoras').querySelectorAll('input, textarea, button').forEach(el => { el.disabled = ro; });
+  $('vHoras').querySelectorAll('input, textarea, button').forEach(el => { if (!el.hasAttribute('data-volver')) el.disabled = ro; });
   ['hGuardar', 'hEnviar'].forEach(id => $(id).classList.toggle('oculto', ro));
   $('hBorrar').classList.toggle('oculto', ro || horas.estado === 'nuevo');
   $('horasError').textContent = horas.estado === 'error' ? 'No se pudo enviar: ' + (horas.error || '') : '';
