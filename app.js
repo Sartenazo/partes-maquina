@@ -346,9 +346,11 @@ function pintarSel() {
     ? [x.registro ? 'Reg. ' + x.registro : '', x.dosis ? 'Dosis ' + fmt(x.dosis) + '/ha' : '', yaProd.has(String(x.id)) ? 'ya añadido' : ''].filter(Boolean).join(' · ')
     : selActual === 'fichas' ? (x.registro ? '📄 Reg. ' + x.registro : 'Sin nº de registro (no hay ficha oficial)')
     : (x.localidad || '');
-  $('selLista').innerHTML = items.length ? items.map(x =>
+  const sinNada = (selActual === 'clases' || selActual === 'equipos') && !q
+    ? `<li data-id="__ninguna" class="${actual ? '' : 'marcado'}"><div class="txt"><b>— Sin ${selActual === 'clases' ? 'máquina' : 'equipo'} —</b><span>Dejar en blanco</span></div></li>` : '';
+  $('selLista').innerHTML = sinNada + (items.length ? items.map(x =>
     `<li data-id="${x.id}" class="${x.nombre === actual || (selActual === 'productos' && yaProd.has(String(x.id))) ? 'marcado' : ''}"><div class="txt"><b>${esc(x.nombre)}</b>${sub(x) ? `<span>${esc(sub(x))}</span>` : ''}</div></li>`
-  ).join('') : '<li class="vacio">' + (listaCat(selActual).length ? 'Nada coincide con la búsqueda' : 'La lista está vacía: pide en la oficina que pulsen "Enviar listas al móvil"') + '</li>';
+  ).join('') : '<li class="vacio">' + (listaCat(selActual).length ? 'Nada coincide con la búsqueda' : 'La lista está vacía: pide en la oficina que pulsen "Enviar listas al móvil"') + '</li>');
 }
 $('selBuscar').addEventListener('input', pintarSel);
 $('selCerrar').addEventListener('click', () => cerrarDlg('dlgSelector'));
@@ -358,6 +360,11 @@ $('selLista').addEventListener('click', e => {
     cerrarDlg('dlgSelector');
     if (li.dataset.id === '__otra') return parcelaPorGps();
     return empezarEn(li.dataset.id);
+  }
+  if (li.dataset.id === '__ninguna') {
+    if (selActual === 'clases') { parte.clase = ''; pintarSelector('pClase', '', 'Elegir máquina…'); pintarSelector('pClaseT', '', 'Elegir máquina…'); }
+    else { parte.maquina = ''; pintarSelector('pEquipo', '', 'Elegir equipo…'); }
+    cerrarDlg('dlgSelector'); autoguardar(); return;
   }
   const x = listaCat(selActual).find(i => String(i.id) === li.dataset.id);
   if (selActual === 'fichas') { cerrarDlg('dlgSelector'); return abrirFicha(x.registro, x.nombre, x.ficha); }
