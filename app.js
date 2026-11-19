@@ -399,7 +399,8 @@ $('selLista').addEventListener('click', e => {
   autoguardar();
 });
 // listas del selector (equipos = tabla Maquinaria)
-function listaCat(lista) { return ((cat || {})[{ equipos: 'maquinas', fichas: 'productos' }[lista] || lista]) || []; }
+// Máquina (clases) y Equipo salen de la tabla Maquinaria (FrmMaquinariaTratamientos)
+function listaCat(lista) { return ((cat || {})[{ equipos: 'maquinas', clases: 'maquinas', fichas: 'productos' }[lista] || lista]) || []; }
 
 // --- ficha oficial (Registro de Productos Fitosanitarios del Ministerio) ---
 const URL_REGFI = 'https://servicio.mapa.gob.es/regfiweb/Productos/Index';
