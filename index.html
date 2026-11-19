@@ -178,6 +178,18 @@
 </main>
 
 <!-- ===== SELECTOR (lista con buscador) ===== -->
+<div id="dlgFicha" class="dialogo oculto" role="dialog" aria-modal="true">
+  <div class="dialogo-caja">
+    <div class="dialogo-cabecera">
+      <strong id="fichaTitulo">Ficha oficial</strong>
+      <button type="button" class="icono" id="fichaCerrar" aria-label="Cerrar">✕</button>
+    </div>
+    <p id="fichaCargando" class="nota">Cargando la ficha del Ministerio…</p>
+    <iframe id="fichaMarco" title="Ficha oficial del producto"></iframe>
+    <a id="fichaPdf" class="nota" target="_blank" rel="noopener">Si no se ve bien, toca aquí para abrir el PDF</a>
+  </div>
+</div>
+
 <div id="dlgSelector" class="dialogo oculto" role="dialog" aria-modal="true">
   <div class="dialogo-caja">
     <div class="dialogo-cabecera">

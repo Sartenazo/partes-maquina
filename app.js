@@ -397,7 +397,15 @@ function fichaDe(idProducto, registro) {
 }
 function abrirFicha(registro, nombre, ficha) {
   registro = String(registro || '').trim();
-  if (ficha) { window.open(URL_FICHA + encodeURIComponent(ficha), '_blank', 'noopener'); return toast('Abriendo la ficha oficial de ' + (nombre || registro) + '…'); }
+  if (ficha) {
+    const pdf = URL_FICHA + encodeURIComponent(ficha);
+    $('fichaTitulo').textContent = nombre || ('Reg. ' + registro);
+    $('fichaPdf').href = pdf;
+    $('fichaCargando').classList.remove('oculto');
+    $('fichaMarco').onload = () => $('fichaCargando').classList.add('oculto');
+    $('fichaMarco').src = 'https://docs.google.com/viewer?embedded=true&url=' + encodeURIComponent(pdf);
+    return abrirDlg('dlgFicha');
+  }
   if (!registro) return toast((nombre ? nombre + ': ' : '') + 'sin nº de registro, no hay ficha oficial', 3500);
   try { navigator.clipboard && navigator.clipboard.writeText(registro).catch(() => {}); } catch (e) {}
   window.open(URL_REGFI, '_blank', 'noopener');
@@ -419,6 +427,7 @@ function pintarProductos() {
 }
 $('btnAddProducto').addEventListener('click', () => abrirSelector('productos'));
 $('btnFichaProducto').addEventListener('click', () => abrirSelector('fichas'));
+$('fichaCerrar').addEventListener('click', () => { cerrarDlg('dlgFicha'); $('fichaMarco').src = 'about:blank'; });
 $('listaProductos').addEventListener('change', e => {
   if (e.target.dataset.campo !== 'dosis') return;
   const p = parte.productos[+e.target.closest('li').dataset.i]; if (!p) return;
