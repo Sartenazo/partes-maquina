@@ -138,7 +138,7 @@
       if (s && s.demo) return g.BD.leer('catalogos');
       return conToken(async tk => {
         // clases = Máquina (Claseequipamiento) · faenas = Tipo Trabajo (Clasefaena)
-        const [empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas] = await Promise.all([
+        const [empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo] = await Promise.all([
           leerTabla('cat_empresas', tk, 'nombre'),
           leerTabla('cat_parcelas', tk, 'poligono,parcela'),
           leerTabla('cat_faenas', tk, 'nombre'),
@@ -147,9 +147,10 @@
           leerTabla('cat_cereales', tk, 'nombre').catch(() => []),
           leerTabla('cat_productos', tk, 'nombre').catch(() => []),
           leerTabla('cat_tareas', tk, 'nombre').catch(() => []),
-          leerTabla('cat_maquinas', tk, 'nombre').catch(() => [])
+          leerTabla('cat_maquinas', tk, 'nombre').catch(() => []),
+          leerTabla('cat_tipotrabajo', tk, 'nombre').catch(() => [])
         ]);
-        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, fecha: new Date().toISOString() };
+        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, fecha: new Date().toISOString() };
         await g.BD.guardar('catalogos', cat);
         return cat;
       });

@@ -19,9 +19,10 @@ const TIPOS = {
   maquina:      { nombre: 'Trabajos con máquinas', corto: 'Máquina', icono: '🚜', maquina: true, unidad: null, kilos: 'Kilos transportados' },
   vendimiadora: { nombre: 'Vendimiadora', corto: 'Vendimiadora', icono: '🍇', unidad: 'Kilos', kilos: 'Kilos vendimiados' },
   cosechadora:  { nombre: 'Cosechadora', corto: 'Cosechadora', icono: '🌾', cereal: true, unidad: 'Kilos', kilos: 'Kilos cosechados' },
-  tratamiento:  { nombre: 'Tratamientos', corto: 'Tratamiento', icono: '🧪', tratamiento: true, unidad: 'Hectareas', kilos: '' }
+  tratamiento:  { nombre: 'Tratamientos', corto: 'Tratamiento', icono: '🧪', tratamiento: true, unidad: 'Hectareas', kilos: '' },
+  terceros:     { nombre: 'Trabajos a terceros', corto: 'Terceros', icono: '🤝', terceros: true, unidad: null, kilos: '' }
 };
-const PROXIMOS = [['🤝', 'Trabajos a terceros']];
+const PROXIMOS = [];
 const tipoDe = p => TIPOS[(p && p.tipo) || 'maquina'] || TIPOS.maquina;
 
 // ---------- reloj sencillo: dos desplegables (hora y minutos) en vez del reloj de agujas ----------
@@ -173,6 +174,7 @@ function filaParte(p) {
   const ini = primeraHora(p);
   const t = tipoDe(p);
   const det = t.maquina ? (p.faena || '') + (p.clase ? ' · ' + p.clase : '') : t.cereal ? (p.cereal || '')
+    : t.terceros ? (p.faena || '')
     : t.tratamiento ? (p.faena || '') + ((p.productos || []).length ? ' · ' + p.productos.length + ' producto' + (p.productos.length === 1 ? '' : 's') : '') : '';
   return `<li data-id="${esc(p.id)}"><div class="txt"><b>${t.icono} ${esc(fechaES(p.fecha))} · ${esc(p.empresa || 'Sin empresa')}</b>
     <span>${esc(t.corto)}${det ? ' · ' + esc(det) : ''} · ${n} parcela${n === 1 ? '' : 's'}${p.estado === 'en_curso' && ini ? ' · desde ' + ini : ''}</span></div>${chip}</li>`;
@@ -254,8 +256,9 @@ function abrirParte(p) {
   $('bloqueMaquina').classList.toggle('oculto', !t.maquina);
   $('bloqueCereal').classList.toggle('oculto', !t.cereal);
   $('bloqueTrat').classList.toggle('oculto', !t.tratamiento);
+  $('bloqueTerceros').classList.toggle('oculto', !t.terceros);
   $('tarjetaProductos').classList.toggle('oculto', !t.tratamiento);
-  $('bloqueKilos').classList.toggle('oculto', !!t.tratamiento);
+  $('bloqueKilos').classList.toggle('oculto', !!t.tratamiento || !!t.terceros);
   if (!parte.productos) parte.productos = [];
   $('pProblema').value = parte.problema || '';
   $('kilosTxt').textContent = t.kilos;
@@ -276,6 +279,7 @@ function abrirParte(p) {
   pintarSelector('pFaena', parte.faena, 'Elegir tipo de trabajo…');
   pintarSelector('pCereal', parte.cereal, 'Elegir cereal…');
   pintarSelector('pTarea', parte.faena, 'Elegir tipo de tarea…');
+  pintarSelector('pTipoTrabajo', parte.faena, 'Elegir tipo de trabajo…');
   pintarSelector('pEquipo', parte.maquina, 'Elegir equipo…');
   pintarProductos();
   pintarRiego();
@@ -315,7 +319,7 @@ document.querySelectorAll('.selector').forEach(b => b.addEventListener('click', 
 
 function abrirSelector(lista) {
   selActual = lista;
-  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea',
+  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea', tipotrabajo: 'Tipo Trabajo',
     equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
   $('selBuscar').value = '';
   pintarSel();
@@ -334,7 +338,7 @@ function pintarSel() {
       `<li data-id="__otra" class="otra"><div class="txt"><b>📍 No está en la lista</b><span>Se busca con el GPS dónde estás (Catastro)</span></div></li>`;
     return;
   }
-  const actual = { empresas: parte.empresa, faenas: parte.faena, clases: parte.clase, cereales: parte.cereal, tareas: parte.faena, equipos: parte.maquina }[selActual];
+  const actual = { empresas: parte.empresa, faenas: parte.faena, clases: parte.clase, cereales: parte.cereal, tareas: parte.faena, tipotrabajo: parte.faena, equipos: parte.maquina }[selActual];
   const yaProd = new Set((parte.productos || []).map(x => String(x.id_producto)));
   const items = listaCat(selActual).filter(x => !q || normal(x.nombre + ' ' + (x.cif || '') + ' ' + (x.registro || '')).includes(q));
   const sub = x => selActual === 'productos'
@@ -371,6 +375,8 @@ $('selLista').addEventListener('click', e => {
     pintarSelector('pEmpresa', x.nombre); pintarParcelas();
   } else if (selActual === 'faenas') {
     parte.faena = x.nombre; pintarSelector('pFaena', x.nombre);
+  } else if (selActual === 'tipotrabajo') {
+    parte.faena = x.nombre; pintarSelector('pTipoTrabajo', x.nombre);
   } else if (selActual === 'tareas') {
     parte.faena = x.nombre; pintarSelector('pTarea', x.nombre);
   } else if (selActual === 'equipos') {
@@ -709,7 +715,7 @@ $('listaParcelas').addEventListener('change', e => {
     if (esHoras(l.unidad)) { l.cantidad_auto = true; }
     else if (/^hect/i.test(l.unidad) && (l.cantidad === '' || l.cantidad_auto) && l.superficie) { l.cantidad = num(l.superficie); l.cantidad_auto = false; }
     else if (l.cantidad_auto) { l.cantidad = ''; l.cantidad_auto = false; }
-    if (tipoDe(parte).maquina) BD.leer('ultimosValores').then(u => BD.guardar('ultimosValores', Object.assign(u || {}, { unidad: l.unidad })));
+    if (tipoDe(parte).maquina || tipoDe(parte).terceros) BD.leer('ultimosValores').then(u => BD.guardar('ultimosValores', Object.assign(u || {}, { unidad: l.unidad })));
   } else if (e.target.dataset.campo === 'kilos') {
     l.kilos = e.target.value === '' ? '' : Math.max(0, num(e.target.value));
   } else {
@@ -889,7 +895,7 @@ async function recordarValores() {
   const prev = (await BD.leer('ultimosValores')) || {};
   const ultU = parte.lineas.length ? parte.lineas[parte.lineas.length - 1].unidad : undefined;
   const t = tipoDe(parte);
-  await BD.guardar('ultimosValores', Object.assign(prev, t.maquina ? { clase: parte.clase, unidad: ultU || prev.unidad } : {},
+  await BD.guardar('ultimosValores', Object.assign(prev, t.maquina ? { clase: parte.clase, unidad: ultU || prev.unidad } : t.terceros ? { unidad: ultU || prev.unidad } : {},
     t.cereal && parte.cereal ? { cereal: parte.cereal, riego: parte.riego || '' } : {},
     t.tratamiento && parte.maquina ? { equipo: parte.maquina } : {}));
 }
@@ -918,7 +924,7 @@ $('btnTerminar').addEventListener('click', async () => {
   const faltan = [];
   if (!parte.fecha) faltan.push('la fecha');
   if (!parte.id_empresa) faltan.push('la empresa');
-  if (tipoDe(parte).maquina && !parte.faena) faltan.push('el tipo de trabajo');
+  if ((tipoDe(parte).maquina || tipoDe(parte).terceros) && !parte.faena) faltan.push('el tipo de trabajo');
   if (tipoDe(parte).cereal && !parte.cereal) faltan.push('el cereal');
   if (tipoDe(parte).cereal && !parte.riego) faltan.push('si es secano o riego');
   if (tipoDe(parte).tratamiento && !parte.faena) faltan.push('el tipo de tarea');
