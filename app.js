@@ -419,8 +419,11 @@ function pintarProductos() {
   const ro = soloLectura(), ha = haParte();
   $('listaProductos').innerHTML = parte.productos.map((p, i) => `<li data-i="${i}">
     <div class="txt"><b>${esc(p.producto)}</b><span>${p.registro ? 'Reg. ' + esc(p.registro) : 'Sin nº de registro'}</span></div>
-    <label class="dosis">Dosis/ha<input type="number" inputmode="decimal" step="any" min="0" placeholder="por ha" value="${esc(p.dosis_ha)}" data-campo="dosis" ${ro ? 'disabled' : ''}></label>
-    <div class="litros"><span>Litros/Kg</span><b>${p.dosis_ha && ha ? fmt(Math.round(p.dosis_ha * ha * 100) / 100) : '—'}</b><small>${ha ? fmt(Math.round(ha * 100) / 100) + ' ha' : 'sin ha'}</small></div>
+    <div class="fila3">
+      <label class="dosis"><span>Dosis/ha</span><input type="number" inputmode="decimal" step="any" min="0" placeholder="0" value="${esc(p.dosis_ha)}" data-campo="dosis" ${ro ? 'disabled' : ''}></label>
+      <div class="litros"><span>Litros/Kg</span><b>${p.dosis_ha ? fmt(Math.round(p.dosis_ha * 100) / 100) : '—'}</b><small>1 ha</small></div>
+      <div class="litros"><span>Litros/Kg</span><b>${p.dosis_ha && ha ? fmt(Math.round(p.dosis_ha * ha * 100) / 100) : '—'}</b><small>${ha ? fmt(Math.round(ha * 100) / 100) + ' ha' : 'sin ha'}</small></div>
+    </div>
     ${p.registro ? '<button type="button" class="ficha" data-accion="fichaProd" aria-label="Ver ficha oficial">📄 Ficha</button>' : ''}
     ${ro ? '' : '<button type="button" class="quitar" data-accion="quitarProd" aria-label="Quitar producto">✕</button>'}</li>`).join('') ||
     `<li class="vacio">${ro ? 'Sin productos.' : 'Añade los productos que llevas en la cuba (puedes hacerlo en el almacén, antes de salir).'}</li>`;

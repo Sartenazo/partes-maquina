@@ -211,3 +211,8 @@ label.check input { width: 24px; height: 24px; min-height: 0; margin: 0; }
 .lista.productos .litros span { font-size: 12px; font-weight: 600; }
 .lista.productos .litros b { font-size: 18px; }
 .lista.productos .litros small { font-size: 11px; color: var(--gris); }
+.lista.productos .fila3 { display: flex; gap: 6px; width: 100%; align-items: stretch; }
+.lista.productos .fila3 > * { flex: 1 1 0; min-width: 0; }
+.lista.productos .fila3 .dosis { flex-direction: column; align-items: stretch; gap: 2px; font-size: 12px; text-align: center; }
+.lista.productos .fila3 .dosis input { font-size: 17px; text-align: center; padding: 6px 4px; width: 100%; }
+.lista.productos .fila3 .litros { min-width: 0; justify-content: center; }
