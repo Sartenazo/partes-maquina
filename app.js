@@ -321,11 +321,11 @@ document.querySelectorAll('.selector').forEach(b => b.addEventListener('click', 
 function abrirSelector(lista) {
   selActual = lista;
   $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea', tipotrabajo: 'Tipo Trabajo',
-    equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
+    equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', irParcela: '🧭 Ir a la parcela (Google Maps)', parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
   $('selBuscar').value = '';
   pintarSel();
   abrirDlg('dlgSelector');
-  if ((lista === 'parcelas' ? parcelasEmpresa() : listaCat(lista)).length > 8) setTimeout(() => $('selBuscar').focus(), 50);
+  if ((lista === 'parcelas' || lista === 'irParcela' ? parcelasEmpresa() : listaCat(lista)).length > 8) setTimeout(() => $('selBuscar').focus(), 50);
 }
 function pintarSel() {
   const q = normal($('selBuscar').value);
@@ -337,6 +337,18 @@ function pintarSel() {
         <span>${esc(p.paraje || '')}${p.tipo_cultivo ? ' · ' + esc(p.tipo_cultivo) : ''}${p.superficie ? ' · ' + fmt(p.superficie) + ' ha' : ''}${apunt.has(String(p.id_parcela)) ? ' · ya apuntada' : ''}</span></div></li>`
     ).join('') + (items.length ? '' : '<li class="vacio">Ninguna parcela coincide con la búsqueda</li>') +
       `<li data-id="__otra" class="otra"><div class="txt"><b>📍 No está en la lista</b><span>Se busca con el GPS dónde estás (Catastro)</span></div></li>`;
+    return;
+  }
+  if (selActual === 'irParcela') {
+    // primero las del parte (la activa marcada), después el resto de parcelas de la empresa
+    const enParte = new Set(parte.lineas.map(l => String(l.id_parcela)));
+    const lin = parte.lineas.filter(l => tieneMapa(l)).map(l => ({ id: 'L:' + l.id, b: nombreParcela(l), s: [l.paraje, 'en este parte'].filter(Boolean).join(' · '), act: l.id === parte.activa }));
+    const otras = parcelasEmpresa().filter(p => !enParte.has(String(p.id_parcela)) && p.sigpac)
+      .map(p => ({ id: 'P:' + p.id_parcela, b: nombreParcela(p), s: [p.paraje, p.tipo_cultivo, p.superficie ? fmt(p.superficie) + ' ha' : ''].filter(Boolean).join(' · ') }));
+    const items = lin.concat(otras).filter(x => !q || normal(x.b + ' ' + x.s + ' ' + x.b.replace(/\D+/g, ' ')).includes(q));
+    $('selLista').innerHTML = items.length ? items.map(x =>
+      `<li data-id="${x.id}" class="${x.act ? 'marcado' : ''}"><div class="txt"><b>${esc(x.b)}</b><span>${esc(x.s)}</span></div></li>`).join('')
+      : '<li class="vacio">' + (lin.length + otras.length ? 'Ninguna parcela coincide con la búsqueda' : 'No hay parcelas con ubicación para esta empresa') + '</li>';
     return;
   }
   const actual = { empresas: parte.empresa, faenas: parte.faena, clases: parte.clase, cereales: parte.cereal, tareas: parte.faena, tipotrabajo: parte.faena, equipos: parte.maquina }[selActual];
@@ -356,6 +368,12 @@ $('selBuscar').addEventListener('input', pintarSel);
 $('selCerrar').addEventListener('click', () => cerrarDlg('dlgSelector'));
 $('selLista').addEventListener('click', e => {
   const li = e.target.closest('li[data-id]'); if (!li) return;
+  if (selActual === 'irParcela') {
+    cerrarDlg('dlgSelector');
+    const [t, id] = [li.dataset.id.slice(0, 1), li.dataset.id.slice(2)];
+    const destino = t === 'L' ? parte.lineas.find(l => l.id === id) : cat.parcelas.find(p => String(p.id_parcela) === id);
+    return destino && abrirMapa(destino, true, true);
+  }
   if (selActual === 'parcelas') {
     cerrarDlg('dlgSelector');
     if (li.dataset.id === '__otra') return parcelaPorGps();
@@ -849,7 +867,8 @@ function pintarGps(buscando) {
     (buscando ? ' · mejorando…' : '') + `<br><small>${new Date(g.fecha).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</small>`;
   $('gpsMapa').classList.toggle('oculto', !g);
   if (g) $('gpsMapa').href = `https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lon}`;
-  $('btnGps').textContent = g ? '📍 Repetir ubicación' : '📍 Tomar ubicación';
+  $('btnGps').textContent = '📍 Tomar ubicación';
+  $('btnGps').classList.toggle('oculto', !!g);          // con ubicación ya tomada: Ir a la parcela + Ver en el mapa
 }
 function tomarGps(repitiendo) {
   if (!('geolocation' in navigator)) { $('gpsEstado').textContent = 'Este móvil no permite la ubicación.'; return; }
@@ -879,6 +898,10 @@ function tomarGps(repitiendo) {
 }
 function pararGps() { if (gpsWatch !== null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; } }
 $('btnGps').addEventListener('click', () => { const rep = !!parte.gps; if (rep) parte.gps._viejo = true; tomarGps(rep); });
+$('btnIrParcela').addEventListener('click', () => {
+  if (!parte.id_empresa && !parte.lineas.length) return toast('Elige primero la empresa');
+  abrirSelector('irParcela');
+});
 
 // --- guardar / terminar / borrar ---
 let tAuto = null;
@@ -1066,13 +1089,13 @@ async function rcDeLinea(l) {
   }
   return null;
 }
-async function abrirMapa(l, google) {
+async function abrirMapa(l, google, navegar) {
   // la ventana se abre ya (si no, el móvil la bloquea) y luego se le pone la dirección
   const w = window.open('', '_blank');
   const ir = url => { if (w && !w.closed) w.location.href = url; else location.href = url; };
   const cerrar = () => { try { if (w) w.close(); } catch (e) {} };
   if (!navigator.onLine) {
-    if (google && l.lat != null) return ir(`https://www.google.com/maps/search/?api=1&query=${l.lat},${l.lon}`);
+    if (google && l.lat != null) return ir(urlGoogle(l.lat, l.lon, navegar));
     cerrar(); return toast('Sin conexión: el mapa se puede ver cuando haya cobertura');
   }
   toast('Buscando la parcela en el Catastro…', 2000);
@@ -1088,7 +1111,12 @@ async function abrirMapa(l, google) {
   }
   if (!lat && l.lat != null) { lat = l.lat; lon = l.lon; }       // si no, donde se tomó el GPS
   if (!lat) { cerrar(); return toast('No tengo la ubicación de esta parcela'); }
-  ir(`https://www.google.com/maps/search/?api=1&query=${lat},${lon}`);
+  ir(urlGoogle(lat, lon, navegar));
+}
+// navegar: abre Google Maps con la ruta en coche hasta la parcela (como "Cómo llegar")
+function urlGoogle(lat, lon, navegar) {
+  return navegar ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`
+                 : `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 }
 
 // =====================================================================
