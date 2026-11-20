@@ -1123,6 +1123,8 @@ async function abrirMapa(l, google, navegar) {
     toast('Buscando el camino que llega a la parcela…', 2500);
     const p = await puntoAcceso(r.rc, +lat, +lon).catch(() => null);
     if (p) { lat = p.lat; lon = p.lon; }
+    toast(p ? (p.modo === 'contorno' ? '🧭 Destino: el camino que linda con la parcela' : '🧭 Destino: el camino más cercano a la parcela')
+            : '🧭 No encuentro caminos en el mapa: voy al centro de la parcela', 3000);
   }
   ir(urlGoogle(lat, lon, navegar));
 }
@@ -1172,9 +1174,10 @@ async function contornoParcela(rc) {
   return pts.length >= 3 ? pts : null;
 }
 async function puntoAcceso(rc, lat0, lon0) {
-  const pol = await contornoParcela(rc);
-  if (!pol) return null;
-  const q = `[out:json][timeout:12];way(around:350,${lat0},${lon0})[highway~"^(primary|secondary|tertiary|unclassified|residential|living_street|road|service|track)$"];out geom;`;
+  // contorno del Catastro; si no se puede, se usa solo el centro (y se busca el camino más cercano a él)
+  const pol = (await contornoParcela(rc)) || [{ lat: lat0, lon: lon0 }];
+  const conContorno = pol.length > 1;
+  const q = `[out:json][timeout:12];way(around:${conContorno ? 350 : 450},${lat0},${lon0})[highway~"^(primary|secondary|tertiary|unclassified|residential|living_street|road|service|track)$"];out geom;`;
   const txt = await pedirTexto('https://overpass-api.de/api/interpreter', 12000,
     { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
   if (!txt) return null;
@@ -1202,11 +1205,12 @@ async function puntoAcceso(rc, lat0, lon0) {
         for (const e of [via[i], via[i + 1]]) { const c = cerca(poli[j], poli[j + 1], e); const dd = d(c, e); if (dd < dmin) { dmin = dd; punto = e; } }
       }
     }
-    const linda = dmin <= 30;
-    const nota = (linda ? 0 : 1000) + (rango[w.tags && w.tags.highway] ?? 3) * 10 + dmin / 100;
-    if (dmin <= 200 && (!mejor || nota < mejor.nota)) mejor = { nota, punto };
+    // con contorno: primero los que lindan (≤30 m) y, entre ellos, el más principal; sin contorno: el más cercano al centro
+    const nota = conContorno ? (dmin <= 30 ? 0 : 1000) + (rango[w.tags && w.tags.highway] ?? 3) * 10 + dmin / 100 : dmin;
+    if (dmin <= (conContorno ? 200 : 450) && (!mejor || nota < mejor.nota)) mejor = { nota, punto };
   }
-  return mejor ? G(mejor.punto) : null;
+  if (!mejor) return null;
+  return Object.assign(G(mejor.punto), { modo: conContorno ? 'contorno' : 'centro' });
 }
 // navegar: abre Google Maps con la ruta en coche hasta la parcela (como "Cómo llegar")
 function urlGoogle(lat, lon, navegar) {

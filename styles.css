@@ -108,7 +108,7 @@ button:disabled { opacity: .55; }
   background: rgba(244,246,242,.96); border-top: 1px solid var(--borde);
 }
 .pie-fijo button { margin: 0; }
-.pie-fijo button { flex: 1 1 0; min-width: 0; padding-left: 6px; padding-right: 6px; font-size: 15px; white-space: nowrap; }
+.pie-fijo button { flex: 1 1 0; min-width: 0; padding: 8px 4px; font-size: 15px; line-height: 1.15; white-space: normal; overflow-wrap: anywhere; min-height: 56px; }
 .pie-fijo .principal { flex: 1.5 1 0; }
 
 .dialogo { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; }
