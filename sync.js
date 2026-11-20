@@ -89,6 +89,19 @@
   g.Sync = {
     configurado,
 
+    // Entrada de una parcela (punto al que lleva "Ir a la parcela"), compartida por todos los trabajadores
+    async guardarEntrada(e) {
+      const s = await g.BD.leer('sesion');
+      if (s && s.demo) return e;
+      return conToken(async tk => {
+        await peticion('/rest/v1/parcelas_entrada?on_conflict=id_parcela', {
+          metodo: 'POST', token: tk, cuerpo: e,
+          cabeceras: { Prefer: 'resolution=merge-duplicates,return=minimal' }
+        });
+        return e;
+      });
+    },
+
     async entrar(email, clave) {
       const { datos } = await peticion('/auth/v1/token?grant_type=password', {
         metodo: 'POST', cuerpo: { email, password: clave }
@@ -138,7 +151,7 @@
       if (s && s.demo) return g.BD.leer('catalogos');
       return conToken(async tk => {
         // clases = Máquina (Claseequipamiento) · faenas = Tipo Trabajo (Clasefaena)
-        const [empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo] = await Promise.all([
+        const [empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas] = await Promise.all([
           leerTabla('cat_empresas', tk, 'nombre'),
           leerTabla('cat_parcelas', tk, 'poligono,parcela'),
           leerTabla('cat_faenas', tk, 'nombre'),
@@ -148,9 +161,10 @@
           leerTabla('cat_productos', tk, 'nombre').catch(() => []),
           leerTabla('cat_tareas', tk, 'nombre').catch(() => []),
           leerTabla('cat_maquinas', tk, 'nombre').catch(() => []),
-          leerTabla('cat_tipotrabajo', tk, 'nombre').catch(() => [])
+          leerTabla('cat_tipotrabajo', tk, 'nombre').catch(() => []),
+          leerTabla('parcelas_entrada', tk, 'id_parcela').catch(() => [])
         ]);
-        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, fecha: new Date().toISOString() };
+        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas, fecha: new Date().toISOString() };
         await g.BD.guardar('catalogos', cat);
         return cat;
       });

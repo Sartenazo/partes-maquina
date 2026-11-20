@@ -549,7 +549,8 @@ function htmlParcela(p, linea) {
     ${tipoDe(parte).maquina ? `<label class="kilos-linea">Kilos de esta parcela<input type="number" inputmode="decimal" step="any" min="0" placeholder="0" value="${esc(linea.kilos == null ? '' : linea.kilos)}" data-campo="kilos" ${ro ? 'disabled' : ''}></label>` : ''}
     ${tieneMapa(linea) ? `<div class="mapas">
       <button type="button" data-accion="mapaCat">🗺 Mapa Catastro</button>
-      <button type="button" data-accion="mapaGoogle">📍 Google Maps</button></div>` : ''}
+      <button type="button" data-accion="mapaGoogle">📍 Google Maps</button>
+      ${linea.id_parcela != null ? `<button type="button" data-accion="entrada">📌 ${entradaDe(linea.id_parcela) ? 'Cambiar entrada' : 'Guardar entrada'}</button>` : ''}</div>` : ''}
     ${ro ? '' : `<div class="acciones">
       ${activa ? '' : `<button type="button" class="secundario" data-accion="empezar">▶ ${linea.tramos.length ? 'Volver aquí' : 'Empezar aquí'}</button>`}
       <button type="button" class="lapiz" data-accion="horas">✎ Horas</button>
@@ -710,6 +711,10 @@ $('listaParcelas').addEventListener('click', e => {
   const clave = b.closest('li[data-clave]').dataset.clave;
   if (b.dataset.accion === 'mapaCat' || b.dataset.accion === 'mapaGoogle') {
     const l = parte.lineas.find(x => claveLinea(x) === clave); if (l) abrirMapa(l, b.dataset.accion === 'mapaGoogle');
+    return;
+  }
+  if (b.dataset.accion === 'entrada') {
+    const l = parte.lineas.find(x => claveLinea(x) === clave); if (l) guardarEntradaAqui(l);
     return;
   }
   if (b.dataset.accion === 'empezar') return empezarEn(clave);
@@ -1094,6 +1099,8 @@ async function abrirMapa(l, google, navegar) {
   const w = window.open('', '_blank');
   const ir = url => { if (w && !w.closed) w.location.href = url; else location.href = url; };
   const cerrar = () => { try { if (w) w.close(); } catch (e) {} };
+  const ent = navegar ? entradaDe(l.id_parcela) : null;
+  if (ent) return ir(urlGoogle(ent.lat, ent.lon, true));             // entrada guardada: exacta
   if (!navigator.onLine) {
     if (google && l.lat != null) return ir(urlGoogle(l.lat, l.lon, navegar));
     cerrar(); return toast('Sin conexión: el mapa se puede ver cuando haya cobertura');
@@ -1111,7 +1118,95 @@ async function abrirMapa(l, google, navegar) {
   }
   if (!lat && l.lat != null) { lat = l.lat; lon = l.lon; }       // si no, donde se tomó el GPS
   if (!lat) { cerrar(); return toast('No tengo la ubicación de esta parcela'); }
+  if (navegar && r) {
+    // en vez del centro de la parcela: el punto del camino que linda con ella
+    toast('Buscando el camino que llega a la parcela…', 2500);
+    const p = await puntoAcceso(r.rc, +lat, +lon).catch(() => null);
+    if (p) { lat = p.lat; lon = p.lon; }
+  }
   ir(urlGoogle(lat, lon, navegar));
+}
+
+// ---------- Entrada de la parcela (la guarda un trabajador estando allí; la usan todos) ----------
+function entradaDe(idParcela) {
+  return idParcela == null ? null : ((cat && cat.entradas) || []).find(e => String(e.id_parcela) === String(idParcela)) || null;
+}
+function guardarEntradaAqui(l) {
+  if (!('geolocation' in navigator)) return toast('Este móvil no permite la ubicación');
+  toast('Tomando tu ubicación…', 3000);
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const c = pos.coords;
+    if (c.accuracy > 50) return toast('El GPS no es preciso ahora (±' + Math.round(c.accuracy) + ' m). Espera un poco al aire libre y repite.', 4000);
+    if (!confirm(`¿Guardar este punto (±${Math.round(c.accuracy)} m) como ENTRADA de ${nombreParcela(l)}${l.paraje ? ' (' + l.paraje + ')' : ''}?\n\n"Ir a la parcela" llevará aquí a todos los trabajadores.`)) return;
+    const e = { id_parcela: l.id_parcela, lat: c.latitude, lon: c.longitude, precision_m: c.accuracy, trabajador: sesion.nombre || '', fecha: new Date().toISOString() };
+    try {
+      await Sync.guardarEntrada(e);
+      cat.entradas = ((cat.entradas || []).filter(x => String(x.id_parcela) !== String(l.id_parcela))).concat([e]);
+      await BD.guardar('catalogos', cat);
+      pintarParcelas();
+      toast('📌 Entrada guardada. "Ir a la parcela" llevará aquí.', 3500);
+    } catch (err) {
+      toast(navigator.onLine ? 'No se pudo guardar la entrada: ' + err.message : 'Sin conexión: guarda la entrada cuando haya cobertura', 4500);
+    }
+  }, () => toast('No se pudo obtener la ubicación'), { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+}
+
+// ---------- Punto de acceso automático: borde de la parcela (Catastro) + caminos (OpenStreetMap) ----------
+async function pedirTexto(url, ms, opciones) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+  try { const r = await fetch(url, Object.assign({ signal: ctl.signal }, opciones || {})); return r.ok ? await r.text() : null; }
+  catch (e) { return null; } finally { clearTimeout(t); }
+}
+async function contornoParcela(rc) {
+  const xml = await pedirTexto('https://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx?service=wfs&version=2&request=getfeature' +
+    '&STOREDQUERIE_ID=GetParcel&refcat=' + encodeURIComponent(rc.slice(0, 14)) + '&srsname=EPSG::4326', 8000);
+  if (!xml) return null;
+  const m = xml.match(/<gml:posList[^>]*>([^<]+)<\/gml:posList>/);
+  if (!m) return null;
+  const n = m[1].trim().split(/\s+/).map(Number);
+  const pts = [];
+  for (let i = 0; i + 1 < n.length; i += 2) {
+    const a = n[i], b = n[i + 1];
+    pts.push(Math.abs(a) > 25 ? { lat: a, lon: b } : { lat: b, lon: a });   // en España la latitud es > 25
+  }
+  return pts.length >= 3 ? pts : null;
+}
+async function puntoAcceso(rc, lat0, lon0) {
+  const pol = await contornoParcela(rc);
+  if (!pol) return null;
+  const q = `[out:json][timeout:12];way(around:350,${lat0},${lon0})[highway~"^(primary|secondary|tertiary|unclassified|residential|living_street|road|service|track)$"];out geom;`;
+  const txt = await pedirTexto('https://overpass-api.de/api/interpreter', 12000,
+    { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+  if (!txt) return null;
+  let datos; try { datos = JSON.parse(txt); } catch (e) { return null; }
+  // plano local en metros
+  const kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 110540;
+  const P = p => ({ x: (p.lon - lon0) * kx, y: (p.lat - lat0) * ky });
+  const G = q => ({ lat: lat0 + q.y / ky, lon: lon0 + q.x / kx });
+  const poli = pol.map(P);
+  const cerca = (a, b, p) => {                     // punto de [a,b] más cercano a p
+    const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+    let t = L ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L : 0; t = Math.max(0, Math.min(1, t));
+    return { x: a.x + t * dx, y: a.y + t * dy };
+  };
+  const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const rango = { primary: 0, secondary: 0, tertiary: 0, unclassified: 1, residential: 1, living_street: 1, road: 1, service: 2, track: 2 };
+  let mejor = null;
+  for (const w of (datos.elements || [])) {
+    if (!w.geometry || w.geometry.length < 2) continue;
+    const via = w.geometry.map(P);
+    let dmin = Infinity, punto = null;
+    for (let i = 0; i + 1 < via.length; i++) {
+      for (const v of poli) { const c = cerca(via[i], via[i + 1], v); const dd = d(c, v); if (dd < dmin) { dmin = dd; punto = c; } }
+      for (let j = 0; j + 1 < poli.length; j++) {
+        for (const e of [via[i], via[i + 1]]) { const c = cerca(poli[j], poli[j + 1], e); const dd = d(c, e); if (dd < dmin) { dmin = dd; punto = e; } }
+      }
+    }
+    const linda = dmin <= 30;
+    const nota = (linda ? 0 : 1000) + (rango[w.tags && w.tags.highway] ?? 3) * 10 + dmin / 100;
+    if (dmin <= 200 && (!mejor || nota < mejor.nota)) mejor = { nota, punto };
+  }
+  return mejor ? G(mejor.punto) : null;
 }
 // navegar: abre Google Maps con la ruta en coche hasta la parcela (como "Cómo llegar")
 function urlGoogle(lat, lon, navegar) {
