@@ -1425,7 +1425,9 @@ $('btnParaje').addEventListener('click', async () => {
   const todos = (cat && cat.parajes) || [];
   if (!todos.length) return toast('Todavía no hay parajes preparados. Pulsa "Actualizar empresas y parcelas" o avisa a la oficina.', 4500);
   let aqui = [];
-  if (navigator.onLine) {
+  const terminos = new Set(todos.map(p => p.ine || p.municipio));
+  if (terminos.size === 1) aqui = todos;            // solo hay un término preparado: no hace falta mirar dónde estás
+  else if (navigator.onLine) {
     toast('Mirando en qué término municipal estás…', 2500);
     const t = await terminoActual();
     if (t) aqui = todos.filter(p => p.ine === t.cod || (p.municipio && t.texto.includes(p.municipio.toUpperCase())));
