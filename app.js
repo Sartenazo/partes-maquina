@@ -1190,7 +1190,7 @@ async function caminoCatastro(rc, pol) {
   const vecinas = xml.split(/<member>|<wfs:member>/).slice(1).map(f => ({
     rc: (f.match(/<cp:nationalCadastralReference>([^<]+)</) || [])[1] || '',
     pts: puntosGML((f.match(/<gml:posList[^>]*>([^<]+)</) || [])[1])
-  })).filter(f => f.rc && f.rc !== rc.slice(0, 14) && /^\d{5}[A-Z]\d{3}9\d{4}$/.test(f.rc) && f.pts.length > 2);
+  })).filter(f => f.rc && f.rc !== rc.slice(0, 14) && /^\d{5}[A-Z]\d{3}09\d{3}$/.test(f.rc) && f.pts.length > 2);
   if (!vecinas.length) return null;
   const lat0 = pol[0].lat, lon0 = pol[0].lon, kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 110540;
   const P = q => ({ x: (q.lon - lon0) * kx, y: (q.lat - lat0) * ky });
