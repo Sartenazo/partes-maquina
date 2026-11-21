@@ -1456,7 +1456,7 @@ async function mostrarParaje(x) {
   let geom = await BD.leer('paraje_' + x.id);
   if (!geom) { try { geom = await Sync.zonaParaje(x.id); if (geom) BD.guardar('paraje_' + x.id, geom); } catch (e) {} }
   if (!geom) return toast('No se pudo descargar la zona del paraje');
-  capaP = L.geoJSON(geom, { style: { color: '#e75480', weight: 2, fillColor: '#ffb6c1', fillOpacity: 0.45 } }).addTo(mapaP);
+  capaP = L.geoJSON(geom, { style: { stroke: false, fillColor: '#ffb6c1', fillOpacity: 0.5 } }).addTo(mapaP);   // zona rosa sin rayas por dentro
   mapaP.fitBounds(capaP.getBounds(), { padding: [20, 20] });
   if (navigator.geolocation && vigilaP == null) {
     vigilaP = navigator.geolocation.watchPosition(p => {
