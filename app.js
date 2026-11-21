@@ -916,9 +916,6 @@ function tomarGps(repitiendo) {
 }
 function pararGps() { if (gpsWatch !== null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; } }
 $('btnGps').addEventListener('click', () => { const rep = !!parte.gps; if (rep) parte.gps._viejo = true; tomarGps(rep); });
-function sinAutovias() { try { return localStorage.getItem('sinAutovias') === '1'; } catch (e) { return $('chkSinAutovias').checked; } }
-try { $('chkSinAutovias').checked = localStorage.getItem('sinAutovias') === '1'; } catch (e) {}
-$('chkSinAutovias').addEventListener('change', e => { try { localStorage.setItem('sinAutovias', e.target.checked ? '1' : '0'); } catch (er) {} });
 $('btnIrParcela').addEventListener('click', () => {
   if (!parte.id_empresa && !parte.lineas.length) return toast('Elige primero la empresa');
   abrirSelector('irParcela');
@@ -1307,8 +1304,6 @@ async function puntoAcceso(rc, lat0, lon0) {
 }
 // navegar: abre Google Maps con la ruta en coche hasta la parcela (como "Cómo llegar")
 function urlGoogle(lat, lon, navegar) {
-  // "Evitar autovías y autopistas": Google no deja evitar todas las carreteras, solo las autovías/autopistas
-  if (navegar && sinAutovias()) return `https://maps.google.com/maps?daddr=${lat},${lon}&dirflg=h`;
   return navegar ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`
                  : `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 }
