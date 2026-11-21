@@ -1123,7 +1123,8 @@ async function abrirMapa(l, google, navegar) {
     toast('Buscando el camino que llega a la parcela…', 2500);
     const p = await puntoAcceso(r.rc, +lat, +lon).catch(() => null);
     if (p) { lat = p.lat; lon = p.lon; }
-    toast(p ? (p.modo === 'contorno' ? '🧭 Destino: el camino que linda con la parcela' : '🧭 Destino: el camino más cercano a la parcela')
+    toast(p ? (p.modo === 'camino' ? '🧭 Destino: el camino del Catastro que linda con la parcela'
+             : p.modo === 'contorno' ? '🧭 Destino: el camino que linda con la parcela' : '🧭 Destino: el camino más cercano a la parcela')
             : '🧭 No encuentro caminos en el mapa: voy al centro de la parcela', 3000);
   }
   ir(urlGoogle(lat, lon, navegar));
@@ -1173,9 +1174,54 @@ async function contornoParcela(rc) {
   }
   return pts.length >= 3 ? pts : null;
 }
+// Los caminos son parcelas del Catastro (nº 9000 y siguientes: "CAMINO", "VÍA DE COMUNICACIÓN"…).
+// Se buscan las parcelas vecinas y, si una es camino, el destino es el centro del lindero con ese camino.
+function puntosGML(txt) {
+  const n = String(txt || '').trim().split(/\s+/).map(Number), pts = [];
+  for (let i = 0; i + 1 < n.length; i += 2) { const a = n[i], b = n[i + 1]; pts.push(Math.abs(a) > 25 ? { lat: a, lon: b } : { lat: b, lon: a }); }
+  return pts;
+}
+async function caminoCatastro(rc, pol) {
+  const la = pol.map(p => p.lat), lo = pol.map(p => p.lon), m = 0.0006;
+  const bbox = [Math.min(...la) - m, Math.min(...lo) - m, Math.max(...la) + m, Math.max(...lo) + m].map(x => x.toFixed(6)).join(',');
+  const xml = await pedirTexto('https://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx?service=wfs&version=2&request=getfeature' +
+    '&typenames=cp:CadastralParcel&bbox=' + bbox + ',urn:ogc:def:crs:EPSG::4326&srsname=EPSG::4326', 10000);
+  if (!xml) return null;
+  const vecinas = xml.split(/<member>|<wfs:member>/).slice(1).map(f => ({
+    rc: (f.match(/<cp:nationalCadastralReference>([^<]+)</) || [])[1] || '',
+    pts: puntosGML((f.match(/<gml:posList[^>]*>([^<]+)</) || [])[1])
+  })).filter(f => f.rc && f.rc !== rc.slice(0, 14) && /^\d{5}[A-Z]\d{3}9\d{4}$/.test(f.rc) && f.pts.length > 2);
+  if (!vecinas.length) return null;
+  const lat0 = pol[0].lat, lon0 = pol[0].lon, kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 110540;
+  const P = q => ({ x: (q.lon - lon0) * kx, y: (q.lat - lat0) * ky });
+  const segd = (a, b, p) => { const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+    let t = L ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L : 0; t = Math.max(0, Math.min(1, t)); return Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y); };
+  let mejor = null;
+  for (const v of vecinas) {
+    // ¿es un camino? (no un arroyo o un canal)
+    const d = await pedirXML(`${OVC}OVCCallejero.asmx/Consulta_DNPRC?Provincia=&Municipio=&RC=${v.rc}`).catch(() => null);
+    const desc = d && d.documentElement ? d.documentElement.textContent.toUpperCase() : '';
+    if (desc && /ARROYO|RIO |RÍO|CANAL|BARRANCO|RAMBLA|ACEQUIA|EMBALSE/.test(desc) && !/CAMINO|CARRETERA|VEREDA|CAÑADA|COLADA/.test(desc)) continue;
+    const C = v.pts.map(P);
+    const junto = pol.map(q => { const p = P(q); let mm = Infinity; for (let j = 0; j + 1 < C.length; j++) mm = Math.min(mm, segd(C[j], C[j + 1], p)); return mm <= 6; });
+    // el tramo seguido más largo de lindero con el camino
+    const n = junto.length; let largo = 0, ini = -1;
+    for (let i = 0; i < n; i++) {
+      if (!junto[i] || junto[(i - 1 + n) % n] && junto.some(x => !x)) continue;
+      let k = 0; while (k < n && junto[(i + k) % n]) k++;
+      if (k > largo) { largo = k; ini = i; }
+    }
+    if (largo && (!mejor || largo > mejor.largo)) mejor = { largo, punto: pol[(ini + Math.floor(largo / 2)) % n] };
+  }
+  return mejor ? { lat: mejor.punto.lat, lon: mejor.punto.lon, modo: 'camino' } : null;
+}
+
 async function puntoAcceso(rc, lat0, lon0) {
-  // contorno del Catastro; si no se puede, se usa solo el centro (y se busca el camino más cercano a él)
-  const pol = (await contornoParcela(rc)) || [{ lat: lat0, lon: lon0 }];
+  // 1) el camino del Catastro que linda con la parcela
+  const contorno = await contornoParcela(rc);
+  if (contorno) { const c = await caminoCatastro(rc, contorno).catch(() => null); if (c) return c; }
+  // 2) si no, los caminos de OpenStreetMap; sin contorno, el camino más cercano al centro
+  const pol = contorno || [{ lat: lat0, lon: lon0 }];
   const conContorno = pol.length > 1;
   const q = `[out:json][timeout:12];way(around:${conContorno ? 350 : 450},${lat0},${lon0})[highway~"^(primary|secondary|tertiary|unclassified|residential|living_street|road|service|track)$"];out geom;`;
   const txt = await pedirTexto('https://overpass-api.de/api/interpreter', 12000,
