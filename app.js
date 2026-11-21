@@ -1518,3 +1518,51 @@ $('parajeIr').addEventListener('click', () => {
   if (!parajeSel || !parajeSel.centro_lat) return;
   window.open(urlGoogle(parajeSel.centro_lat, parajeSel.centro_lon, true), '_blank');
 });
+
+// =====================================================================
+//  IR A UNA PARCELA sin empresa: término + polígono + parcela
+// =====================================================================
+async function terminosConocidos() {
+  // los términos de las parcelas de la oficina (SIGPAC prov-mun) y el de los parajes
+  const cuenta = new Map();
+  for (const p of ((cat && cat.parcelas) || [])) {
+    const n = String(p.sigpac || '').split(/[-:\s]+/).filter(Boolean).map(Number);
+    if (n.length >= 4 && !n.slice(0, 2).some(isNaN) && n[1] !== 999) {
+      const k = n[0] + '-' + n[1]; const c = cuenta.get(k) || { cp: n[0], cm: n[1], n: 0, ej: n }; c.n++; cuenta.set(k, c);
+    }
+  }
+  const nombres = (await BD.leer('nombresTerminos').catch(() => null)) || {};
+  for (const p of ((cat && cat.parajes) || [])) {
+    const k = (+p.ine.slice(0, 2)) + '-' + (+p.ine.slice(2)); if (!nombres[k]) nombres[k] = p.municipio;
+    if (!cuenta.has(k)) cuenta.set(k, { cp: +p.ine.slice(0, 2), cm: +p.ine.slice(2), n: 0 });
+  }
+  // nombre de los que no lo tenemos: se pregunta al Catastro con una parcela de ese término (una vez)
+  let nuevos = false;
+  await Promise.all([...cuenta.values()].filter(c => !nombres[c.cp + '-' + c.cm] && c.ej && navigator.onLine).map(async c => {
+    const d = await Promise.race([pedirXML(`${OVC}OVCCallejeroCodigos.asmx/Consulta_DNPPP_Codigos?CodigoProvincia=${c.cp}&CodigoMunicipio=&CodigoMunicipioINE=${c.cm}&Poligono=${c.ej[2]}&Parcela=${c.ej[3]}`).catch(() => null), limite(4000)]);
+    const nm = d && tx(d, 'nm'); if (nm) { nombres[c.cp + '-' + c.cm] = nm; nuevos = true; }
+  }));
+  if (nuevos) BD.guardar('nombresTerminos', nombres).catch(() => {});
+  return [...cuenta.values()].map(c => ({ k: c.cp + '-' + c.cm, nombre: nombres[c.cp + '-' + c.cm] || ('Término ' + c.cp + '-' + c.cm), n: c.n }))
+    .sort((a, b) => b.n - a.n);
+}
+$('btnIrPP').addEventListener('click', async () => {
+  const sel = $('irPPTermino');
+  sel.innerHTML = '<option>Cargando…</option>';
+  abrirDlg('dlgIrPP');
+  const ts = await terminosConocidos();
+  let ult = ''; try { ult = localStorage.getItem('irPPTermino') || ''; } catch (e) {}
+  sel.innerHTML = ts.length ? ts.map(t => `<option value="${t.k}"${t.k === ult ? ' selected' : ''}>${esc(t.nombre)}</option>`).join('')
+                            : '<option value="2-73">TARAZONA DE LA MANCHA</option>';
+  setTimeout(() => $('irPPPol').focus(), 80);
+});
+$('irPPCerrar').addEventListener('click', () => cerrarDlg('dlgIrPP'));
+$('formIrPP').addEventListener('submit', e => {
+  e.preventDefault();
+  const pol = +$('irPPPol').value, parc = +$('irPPParc').value, k = $('irPPTermino').value;
+  if (!pol || !parc) return toast('Pon el polígono y la parcela');
+  try { localStorage.setItem('irPPTermino', k); } catch (er) {}
+  cerrarDlg('dlgIrPP');
+  const [cp, cm] = k.split('-');
+  abrirMapa({ sigpac: `${cp}-${cm}-${pol}-${parc}`, id_parcela: null }, true, true);   // la misma búsqueda que "Ir a la parcela"
+});

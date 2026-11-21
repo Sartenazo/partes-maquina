@@ -50,7 +50,10 @@
   <div id="avisoDemo" class="aviso oculto">MODO DEMOSTRACIÓN · datos inventados, no se envía nada a la oficina</div>
   <h3 class="pregunta">¿Qué parte vas a hacer?</h3>
   <div id="tiposParte" class="tipos"></div>
-  <button type="button" class="secundario" id="btnParaje">🗺 Buscar paraje</button>
+  <div class="fila dos botones-inicio">
+    <button type="button" class="secundario" id="btnParaje">🗺 Buscar paraje</button>
+    <button type="button" class="secundario" id="btnIrPP">🧭 Ir a una parcela</button>
+  </div>
   <div id="estadoEnvio" class="estado-envio"></div>
   <button id="btnInstalar" class="secundario oculto">📲 Instalar la app en el móvil</button>
   <div id="ayudaIOS" class="tarjeta ios oculto">
@@ -189,6 +192,22 @@
 </main>
 
 <!-- ===== SELECTOR (lista con buscador) ===== -->
+<div id="dlgIrPP" class="dialogo oculto" role="dialog" aria-modal="true">
+  <form class="dialogo-caja" id="formIrPP" novalidate>
+    <div class="dialogo-cabecera">
+      <strong>🧭 Ir a una parcela</strong>
+      <button type="button" class="icono" id="irPPCerrar" aria-label="Cerrar">✕</button>
+    </div>
+    <label>Término municipal<select id="irPPTermino"></select></label>
+    <div class="fila dos">
+      <label>Polígono<input id="irPPPol" type="number" inputmode="numeric" min="1" required></label>
+      <label>Parcela<input id="irPPParc" type="number" inputmode="numeric" min="1" required></label>
+    </div>
+    <p class="nota">Abre Google Maps con la ruta hasta el camino más cercano a esa parcela. No hace falta elegir empresa.</p>
+    <button type="submit" class="principal">🧭 Ir</button>
+  </form>
+</div>
+
 <div id="dlgParaje" class="dialogo oculto" role="dialog" aria-modal="true">
   <div class="dialogo-caja">
     <div class="dialogo-cabecera">
