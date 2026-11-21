@@ -50,6 +50,7 @@
   <div id="avisoDemo" class="aviso oculto">MODO DEMOSTRACIÓN · datos inventados, no se envía nada a la oficina</div>
   <h3 class="pregunta">¿Qué parte vas a hacer?</h3>
   <div id="tiposParte" class="tipos"></div>
+  <button type="button" class="secundario" id="btnParaje">🗺 Buscar paraje</button>
   <div id="estadoEnvio" class="estado-envio"></div>
   <button id="btnInstalar" class="secundario oculto">📲 Instalar la app en el móvil</button>
   <div id="ayudaIOS" class="tarjeta ios oculto">
@@ -186,6 +187,21 @@
 </main>
 
 <!-- ===== SELECTOR (lista con buscador) ===== -->
+<div id="dlgParaje" class="dialogo oculto" role="dialog" aria-modal="true">
+  <div class="dialogo-caja">
+    <div class="dialogo-cabecera">
+      <strong id="parajeTitulo">Paraje</strong>
+      <button type="button" class="icono" id="parajeCerrar" aria-label="Cerrar">✕</button>
+    </div>
+    <p id="parajeInfo" class="nota"></p>
+    <div id="mapaParaje"></div>
+    <div class="fila dos">
+      <button type="button" class="secundario" id="parajeOtro">🔎 Otro paraje</button>
+      <button type="button" class="principal" id="parajeIr">🧭 Cómo llegar</button>
+    </div>
+  </div>
+</div>
+
 <div id="dlgFicha" class="dialogo oculto" role="dialog" aria-modal="true">
   <div class="dialogo-caja">
     <div class="dialogo-cabecera">

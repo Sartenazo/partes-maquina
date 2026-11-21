@@ -75,10 +75,10 @@
     }
   }
 
-  async function leerTabla(tabla, tk, orden) {
+  async function leerTabla(tabla, tk, orden, campos) {
     const todas = [];
     for (let desde = 0; ; desde += 1000) {
-      const { datos } = await peticion('/rest/v1/' + tabla + '?select=*&order=' + orden, {
+      const { datos } = await peticion('/rest/v1/' + tabla + '?select=' + (campos || '*') + '&order=' + orden, {
         token: tk, cabeceras: { Range: desde + '-' + (desde + 999) }
       });
       todas.push(...datos);
@@ -88,6 +88,14 @@
 
   g.Sync = {
     configurado,
+
+    // Zona (GeoJSON) de un paraje
+    async zonaParaje(id) {
+      return conToken(async tk => {
+        const { datos } = await peticion('/rest/v1/parajes?select=geom&id=eq.' + id, { token: tk });
+        return datos && datos[0] ? datos[0].geom : null;
+      });
+    },
 
     // Entrada de una parcela (punto al que lleva "Ir a la parcela"), compartida por todos los trabajadores
     async guardarEntrada(e) {
@@ -151,7 +159,7 @@
       if (s && s.demo) return g.BD.leer('catalogos');
       return conToken(async tk => {
         // clases = Máquina (Claseequipamiento) · faenas = Tipo Trabajo (Clasefaena)
-        const [empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas] = await Promise.all([
+        const [empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas, parajes] = await Promise.all([
           leerTabla('cat_empresas', tk, 'nombre'),
           leerTabla('cat_parcelas', tk, 'poligono,parcela'),
           leerTabla('cat_faenas', tk, 'nombre'),
@@ -162,9 +170,10 @@
           leerTabla('cat_tareas', tk, 'nombre').catch(() => []),
           leerTabla('cat_maquinas', tk, 'nombre').catch(() => []),
           leerTabla('cat_tipotrabajo', tk, 'nombre').catch(() => []),
-          leerTabla('parcelas_entrada', tk, 'id_parcela').catch(() => [])
+          leerTabla('parcelas_entrada', tk, 'id_parcela').catch(() => []),
+          leerTabla('parajes', tk, 'nombre', 'id,ine,municipio,nombre,n_parcelas,superficie_ha,centro_lat,centro_lon').catch(() => [])
         ]);
-        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas, fecha: new Date().toISOString() };
+        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas, parajes, fecha: new Date().toISOString() };
         await g.BD.guardar('catalogos', cat);
         return cat;
       });

@@ -321,11 +321,11 @@ document.querySelectorAll('.selector').forEach(b => b.addEventListener('click', 
 function abrirSelector(lista) {
   selActual = lista;
   $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea', tipotrabajo: 'Tipo Trabajo',
-    equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', irParcela: '🧭 Ir a la parcela (Google Maps)', parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
+    equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', irParcela: '🧭 Ir a la parcela (Google Maps)', parajes: '🗺 Parajes' + (muniNombre ? ' de ' + muniNombre : ''), parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
   $('selBuscar').value = '';
   pintarSel();
   abrirDlg('dlgSelector');
-  if ((lista === 'parcelas' || lista === 'irParcela' ? parcelasEmpresa() : listaCat(lista)).length > 8) setTimeout(() => $('selBuscar').focus(), 50);
+  if ((lista === 'parcelas' || lista === 'irParcela' ? parcelasEmpresa() : lista === 'parajes' ? parajesLista : listaCat(lista)).length > 8) setTimeout(() => $('selBuscar').focus(), 50);
 }
 function pintarSel() {
   const q = normal($('selBuscar').value);
@@ -337,6 +337,13 @@ function pintarSel() {
         <span>${esc(p.paraje || '')}${p.tipo_cultivo ? ' · ' + esc(p.tipo_cultivo) : ''}${p.superficie ? ' · ' + fmt(p.superficie) + ' ha' : ''}${apunt.has(String(p.id_parcela)) ? ' · ya apuntada' : ''}</span></div></li>`
     ).join('') + (items.length ? '' : '<li class="vacio">Ninguna parcela coincide con la búsqueda</li>') +
       `<li data-id="__otra" class="otra"><div class="txt"><b>📍 No está en la lista</b><span>Se busca con el GPS dónde estás (Catastro)</span></div></li>`;
+    return;
+  }
+  if (selActual === 'parajes') {
+    const items = parajesLista.filter(x => !q || normal(x.nombre).includes(q));
+    $('selLista').innerHTML = items.length ? items.map(x =>
+      `<li data-id="${x.id}" class="${parajeSel && parajeSel.id === x.id ? 'marcado' : ''}"><div class="txt"><b>${esc(x.nombre)}</b><span>${esc([muniNombre ? '' : x.municipio, (x.n_parcelas || 0) + ' parcelas', x.superficie_ha ? fmt(Math.round(x.superficie_ha)) + ' ha' : ''].filter(Boolean).join(' · '))}</span></div></li>`).join('')
+      : '<li class="vacio">Ningún paraje coincide con la búsqueda</li>';
     return;
   }
   if (selActual === 'irParcela') {
@@ -368,6 +375,11 @@ $('selBuscar').addEventListener('input', pintarSel);
 $('selCerrar').addEventListener('click', () => cerrarDlg('dlgSelector'));
 $('selLista').addEventListener('click', e => {
   const li = e.target.closest('li[data-id]'); if (!li) return;
+  if (selActual === 'parajes') {
+    cerrarDlg('dlgSelector');
+    const x = parajesLista.find(p => String(p.id) === li.dataset.id);
+    return x && mostrarParaje(x);
+  }
   if (selActual === 'irParcela') {
     cerrarDlg('dlgSelector');
     const [t, id] = [li.dataset.id.slice(0, 1), li.dataset.id.slice(2)];
@@ -1385,3 +1397,83 @@ document.querySelectorAll('[data-riego]').forEach(b => b.addEventListener('click
   for (const l of parte.lineas) l.cereal = parte.riego;
   pintarRiego(); autoguardar();
 }));
+
+// =====================================================================
+//  BUSCAR PARAJE: parajes del término donde estás y su zona en rosa
+// =====================================================================
+let mapaP = null, capaP = null, yoP = null, vigilaP = null, parajeSel = null, parajesLista = [], muniNombre = '';
+function cargarLeaflet() {
+  if (window.L) return Promise.resolve();
+  return new Promise((ok, mal) => {
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    const sc = document.createElement('script'); sc.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    sc.onload = ok; sc.onerror = mal; document.head.appendChild(sc);
+  });
+}
+// ¿En qué término estoy? (GPS + Catastro). Devuelve { cod: '02073', texto: 'POLÍGONO … TARAZONA DE LA MANCHA (ALBACETE)' }
+async function terminoActual() {
+  const pos = await new Promise(r => navigator.geolocation
+    ? navigator.geolocation.getCurrentPosition(p => r(p), () => r(null), { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 })
+    : r(null));
+  if (!pos) return null;
+  const d = await pedirXML(`${OVC}OVCCoordenadas.asmx/Consulta_RCCOOR?SRS=EPSG:4326&Coordenada_X=${pos.coords.longitude}&Coordenada_Y=${pos.coords.latitude}`).catch(() => null);
+  if (!d) return null;
+  return { cod: (tx(d, 'pc1') || '').slice(0, 5), texto: (tx(d, 'ldt') || '').toUpperCase() };
+}
+$('btnParaje').addEventListener('click', async () => {
+  const todos = (cat && cat.parajes) || [];
+  if (!todos.length) return toast('Todavía no hay parajes preparados. Pulsa "Actualizar empresas y parcelas" o avisa a la oficina.', 4500);
+  let aqui = [];
+  if (navigator.onLine) {
+    toast('Mirando en qué término municipal estás…', 2500);
+    const t = await terminoActual();
+    if (t) aqui = todos.filter(p => p.ine === t.cod || (p.municipio && t.texto.includes(p.municipio.toUpperCase())));
+  }
+  parajesLista = aqui.length ? aqui : todos;
+  const munis = [...new Set(parajesLista.map(p => p.municipio))];
+  muniNombre = munis.length === 1 ? munis[0] : '';
+  if (!aqui.length) toast('No sé en qué término estás (o no está preparado): te enseño todos los parajes', 3500);
+  abrirSelector('parajes');
+});
+async function mostrarParaje(x) {
+  parajeSel = x;
+  $('parajeTitulo').textContent = x.nombre;
+  $('parajeInfo').textContent = [x.municipio, (x.n_parcelas || 0) + ' parcelas', x.superficie_ha ? fmt(Math.round(x.superficie_ha)) + ' ha' : ''].filter(Boolean).join(' · ');
+  abrirDlg('dlgParaje');
+  try { await cargarLeaflet(); } catch (e) { return toast('Sin conexión: no se puede cargar el mapa'); }
+  if (!mapaP) {
+    mapaP = L.map('mapaParaje', { zoomControl: true, attributionControl: false });
+    // foto aérea (PNOA, IGN) y encima las parcelas y caminos del Catastro
+    L.tileLayer('https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&Format=image/jpeg&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}',
+      { maxZoom: 20, maxNativeZoom: 19 }).addTo(mapaP);
+    L.tileLayer.wms('https://ovc.catastro.meh.es/Cartografia/WMS/ServidorWMS.aspx',
+      { layers: 'Catastro', format: 'image/png', transparent: true, opacity: 0.5, maxZoom: 20 }).addTo(mapaP);
+  }
+  setTimeout(() => mapaP.invalidateSize(), 60);
+  if (capaP) { mapaP.removeLayer(capaP); capaP = null; }
+  if (x.centro_lat) mapaP.setView([x.centro_lat, x.centro_lon], 14);
+  let geom = await BD.leer('paraje_' + x.id);
+  if (!geom) { try { geom = await Sync.zonaParaje(x.id); if (geom) BD.guardar('paraje_' + x.id, geom); } catch (e) {} }
+  if (!geom) return toast('No se pudo descargar la zona del paraje');
+  capaP = L.geoJSON(geom, { style: { color: '#e75480', weight: 2, fillColor: '#ffb6c1', fillOpacity: 0.45 } }).addTo(mapaP);
+  mapaP.fitBounds(capaP.getBounds(), { padding: [20, 20] });
+  if (navigator.geolocation && vigilaP == null) {
+    vigilaP = navigator.geolocation.watchPosition(p => {
+      const ll = [p.coords.latitude, p.coords.longitude];
+      if (!yoP) yoP = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="yo-punto"></div>', iconSize: [16, 16] }) }).addTo(mapaP);
+      else yoP.setLatLng(ll);
+    }, () => {}, { enableHighAccuracy: true, maximumAge: 10000 });
+  }
+}
+function cerrarParaje() {
+  cerrarDlg('dlgParaje');
+  if (vigilaP != null) { navigator.geolocation.clearWatch(vigilaP); vigilaP = null; }
+  if (yoP && mapaP) { mapaP.removeLayer(yoP); yoP = null; }
+}
+$('parajeCerrar').addEventListener('click', cerrarParaje);
+$('parajeOtro').addEventListener('click', () => { cerrarParaje(); abrirSelector('parajes'); });
+$('parajeIr').addEventListener('click', () => {
+  if (!parajeSel || !parajeSel.centro_lat) return;
+  window.open(urlGoogle(parajeSel.centro_lat, parajeSel.centro_lon, true), '_blank');
+});
