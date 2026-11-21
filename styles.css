@@ -225,3 +225,8 @@ label.check input { width: 24px; height: 24px; min-height: 0; margin: 0; }
 #parajeInfo { margin: 0 0 6px; }
 #dlgParaje .fila.dos { margin-top: 8px; }
 .yo-punto { width: 16px; height: 16px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 4px rgba(0,0,0,.5); }
+
+.ir-parcela { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #c9d3c0; }
+.ir-parcela #btnIrParcela { width: 100%; }
+.ir-parcela .check { display: flex; align-items: center; gap: 8px; margin: 8px 2px 0; font-weight: 500; font-size: 15px; }
+.ir-parcela .check input { width: 22px; height: 22px; }

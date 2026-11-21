@@ -916,6 +916,9 @@ function tomarGps(repitiendo) {
 }
 function pararGps() { if (gpsWatch !== null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; } }
 $('btnGps').addEventListener('click', () => { const rep = !!parte.gps; if (rep) parte.gps._viejo = true; tomarGps(rep); });
+function sinAutovias() { try { return localStorage.getItem('sinAutovias') === '1'; } catch (e) { return $('chkSinAutovias').checked; } }
+try { $('chkSinAutovias').checked = localStorage.getItem('sinAutovias') === '1'; } catch (e) {}
+$('chkSinAutovias').addEventListener('change', e => { try { localStorage.setItem('sinAutovias', e.target.checked ? '1' : '0'); } catch (er) {} });
 $('btnIrParcela').addEventListener('click', () => {
   if (!parte.id_empresa && !parte.lineas.length) return toast('Elige primero la empresa');
   abrirSelector('irParcela');
@@ -1132,15 +1135,46 @@ async function abrirMapa(l, google, navegar) {
   if (!lat && l.lat != null) { lat = l.lat; lon = l.lon; }       // si no, donde se tomó el GPS
   if (!lat) { cerrar(); return toast('No tengo la ubicación de esta parcela'); }
   if (navegar && r) {
-    // en vez del centro de la parcela: el punto del camino que linda con ella
-    toast('Buscando el camino que llega a la parcela…', 2500);
-    const p = await puntoAcceso(r.rc, +lat, +lon).catch(() => null);
-    if (p) { lat = p.lat; lon = p.lon; }
-    toast(p ? (p.modo === 'camino' ? '🧭 Destino: el camino del Catastro que linda con la parcela'
-             : p.modo === 'contorno' ? '🧭 Destino: el camino que linda con la parcela' : '🧭 Destino: el camino más cercano a la parcela')
-            : '🧭 No encuentro caminos en el mapa: voy al centro de la parcela', 3000);
+    toast('Buscando el mejor camino hasta la parcela…', 3000);
+    const m = await mejorDestino(r.rc, +lat, +lon).catch(() => null);
+    if (m) { lat = m.lat; lon = m.lon; }
+    toast(m ? m.texto : '🧭 Voy al centro de la parcela', 3000);
   }
   ir(urlGoogle(lat, lon, navegar));
+}
+
+// ---------- Mejor destino: se prueban varios puntos de llegada y se elige el que menos cuesta alcanzar ----------
+// Candidatos: el centro de la parcela y el camino que linda con ella (Catastro / OpenStreetMap).
+// Para cada uno se calcula la ruta desde donde estás (OSRM, mapa de OpenStreetMap con caminos agrícolas) y
+// lo que queda "a pie" desde el último camino. Gana el de menos tiempo, contando el tramo sin camino como lento.
+function miPosicion(ms) {
+  return new Promise(r => navigator.geolocation
+    ? navigator.geolocation.getCurrentPosition(p => r(p.coords), () => r(null), { enableHighAccuracy: false, timeout: ms, maximumAge: 120000 })
+    : r(null));
+}
+async function rutaOSRM(o, d) {
+  const txt = await pedirTexto(`https://router.project-osrm.org/route/v1/driving/${o.longitude},${o.latitude};${d.lon},${d.lat}?overview=false`, 7000);
+  try { const j = JSON.parse(txt); if (j.code !== 'Ok') return null;
+    return { seg: j.routes[0].duration, sinCamino: j.waypoints[1].distance, llegada: { lon: j.waypoints[1].location[0], lat: j.waypoints[1].location[1] } };
+  } catch (e) { return null; }
+}
+async function mejorDestino(rc, lat, lon) {
+  const [yo, acceso] = await Promise.all([miPosicion(8000), puntoAcceso(rc, lat, lon).catch(() => null)]);
+  const cands = [{ lat, lon, modo: 'centro' }];
+  if (acceso) cands.push(acceso);
+  if (!yo) return acceso ? Object.assign(acceso, { texto: '🧭 Destino: el camino que linda con la parcela' }) : null;
+  const rutas = await Promise.all(cands.map(c => rutaOSRM(yo, c)));
+  let mejor = null;
+  cands.forEach((c, i) => {
+    const r = rutas[i]; if (!r) return;
+    const coste = r.seg + r.sinCamino * 3;           // cada metro sin camino cuenta como 3 s (andando / campo a través)
+    if (!mejor || coste < mejor.coste) mejor = { c, r, coste };
+  });
+  if (!mejor) return acceso ? Object.assign(acceso, { texto: '🧭 Destino: el camino que linda con la parcela' }) : null;
+  // se manda a Google el punto del camino donde termina la ruta (si está cerca de la parcela)
+  const dest = mejor.r.sinCamino <= 400 ? mejor.r.llegada : mejor.c;
+  const fin = Math.round(mejor.r.sinCamino);
+  return { lat: dest.lat, lon: dest.lon, texto: '🧭 Destino: el camino más cercano a la parcela' + (fin > 30 ? ` (quedan unos ${fin} m sin camino)` : '') };
 }
 
 // ---------- Entrada de la parcela (la guarda un trabajador estando allí; la usan todos) ----------
@@ -1273,6 +1307,8 @@ async function puntoAcceso(rc, lat0, lon0) {
 }
 // navegar: abre Google Maps con la ruta en coche hasta la parcela (como "Cómo llegar")
 function urlGoogle(lat, lon, navegar) {
+  // "Evitar autovías y autopistas": Google no deja evitar todas las carreteras, solo las autovías/autopistas
+  if (navegar && sinAutovias()) return `https://maps.google.com/maps?daddr=${lat},${lon}&dirflg=h`;
   return navegar ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`
                  : `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 }
