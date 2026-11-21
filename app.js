@@ -1522,46 +1522,55 @@ $('parajeIr').addEventListener('click', () => {
 // =====================================================================
 //  IR A UNA PARCELA sin empresa: término + polígono + parcela
 // =====================================================================
-async function terminosConocidos() {
-  // los términos de las parcelas de la oficina (SIGPAC prov-mun) y el de los parajes
-  const cuenta = new Map();
-  for (const p of ((cat && cat.parcelas) || [])) {
-    const n = String(p.sigpac || '').split(/[-:\s]+/).filter(Boolean).map(Number);
-    if (n.length >= 4 && !n.slice(0, 2).some(isNaN) && n[1] !== 999) {
-      const k = n[0] + '-' + n[1]; const c = cuenta.get(k) || { cp: n[0], cm: n[1], n: 0, ej: n }; c.n++; cuenta.set(k, c);
-    }
-  }
-  const nombres = (await BD.leer('nombresTerminos').catch(() => null)) || {};
-  for (const p of ((cat && cat.parajes) || [])) {
-    const k = (+p.ine.slice(0, 2)) + '-' + (+p.ine.slice(2)); if (!nombres[k]) nombres[k] = p.municipio;
-    if (!cuenta.has(k)) cuenta.set(k, { cp: +p.ine.slice(0, 2), cm: +p.ine.slice(2), n: 0 });
-  }
-  // nombre de los que no lo tenemos: se pregunta al Catastro con una parcela de ese término (una vez)
-  let nuevos = false;
-  await Promise.all([...cuenta.values()].filter(c => !nombres[c.cp + '-' + c.cm] && c.ej && navigator.onLine).map(async c => {
-    const d = await Promise.race([pedirXML(`${OVC}OVCCallejeroCodigos.asmx/Consulta_DNPPP_Codigos?CodigoProvincia=${c.cp}&CodigoMunicipio=&CodigoMunicipioINE=${c.cm}&Poligono=${c.ej[2]}&Parcela=${c.ej[3]}`).catch(() => null), limite(4000)]);
-    const nm = d && tx(d, 'nm'); if (nm) { nombres[c.cp + '-' + c.cm] = nm; nuevos = true; }
-  }));
-  if (nuevos) BD.guardar('nombresTerminos', nombres).catch(() => {});
-  return [...cuenta.values()].map(c => ({ k: c.cp + '-' + c.cm, nombre: nombres[c.cp + '-' + c.cm] || ('Término ' + c.cp + '-' + c.cm), n: c.n }))
-    .sort((a, b) => b.n - a.n);
+// Provincias y municipios de España (Catastro); se guardan en el móvil la primera vez
+async function listaProvincias() {
+  let l = await BD.leer('provinciasCat').catch(() => null);
+  if (l && l.length) return l;
+  const d = await Promise.race([pedirXML(`${OVC}OVCCallejero.asmx/ConsultaProvincia`).catch(() => null), limite(8000)]);
+  if (!d) return [];
+  l = [...d.getElementsByTagName('prov')].map(p => ({ cp: +tx(p, 'cpine'), np: tx(p, 'np') })).sort((x, y) => x.np.localeCompare(y.np, 'es'));
+  if (l.length) BD.guardar('provinciasCat', l).catch(() => {});
+  return l;
+}
+async function listaMunicipios(np) {
+  const clave = 'municipiosCat_' + np;
+  let l = await BD.leer(clave).catch(() => null);
+  if (l && l.length) return l;
+  const d = await Promise.race([pedirXML(`${OVC}OVCCallejero.asmx/ConsultaMunicipio?Provincia=${encodeURIComponent(np)}&Municipio=`).catch(() => null), limite(8000)]);
+  if (!d) return [];
+  l = [...d.getElementsByTagName('muni')].map(m => ({ nm: tx(m, 'nm'), cd: +tx(m, 'cd'), cmc: +tx(m, 'cmc') })).sort((x, y) => x.nm.localeCompare(y.nm, 'es'));
+  if (l.length) BD.guardar(clave, l).catch(() => {});
+  return l;
+}
+function recordar(k, v) { try { if (v === undefined) return localStorage.getItem(k) || ''; localStorage.setItem(k, v); } catch (e) { return ''; } }
+async function pintarMunicipios() {
+  const np = $('irPPProv').value, sel = $('irPPTermino');
+  sel.innerHTML = '<option>Cargando…</option>';
+  const ms = await listaMunicipios(np);
+  const ult = recordar('irPPMuni') || 'TARAZONA DE LA MANCHA';
+  sel.innerHTML = ms.length ? ms.map(m => `<option value="${m.cd}-${m.cmc}"${m.nm === ult ? ' selected' : ''}>${esc(m.nm)}</option>`).join('')
+                            : '<option value="">Sin conexión: no puedo cargar los municipios</option>';
 }
 $('btnIrPP').addEventListener('click', async () => {
-  const sel = $('irPPTermino');
-  sel.innerHTML = '<option>Cargando…</option>';
+  const sel = $('irPPProv');
+  sel.innerHTML = '<option>Cargando…</option>'; $('irPPTermino').innerHTML = '';
   abrirDlg('dlgIrPP');
-  const ts = await terminosConocidos();
-  let ult = ''; try { ult = localStorage.getItem('irPPTermino') || ''; } catch (e) {}
-  sel.innerHTML = ts.length ? ts.map(t => `<option value="${t.k}"${t.k === ult ? ' selected' : ''}>${esc(t.nombre)}</option>`).join('')
-                            : '<option value="2-73">TARAZONA DE LA MANCHA</option>';
+  const ps = await listaProvincias();
+  const ult = recordar('irPPProv') || 'ALBACETE';
+  sel.innerHTML = ps.length ? ps.map(p => `<option value="${esc(p.np)}"${p.np === ult ? ' selected' : ''}>${esc(p.np)}</option>`).join('')
+                            : '<option value="">Sin conexión: no puedo cargar las provincias</option>';
+  if (ps.length) await pintarMunicipios();
   setTimeout(() => $('irPPPol').focus(), 80);
 });
+$('irPPProv').addEventListener('change', pintarMunicipios);
 $('irPPCerrar').addEventListener('click', () => cerrarDlg('dlgIrPP'));
 $('formIrPP').addEventListener('submit', e => {
   e.preventDefault();
   const pol = +$('irPPPol').value, parc = +$('irPPParc').value, k = $('irPPTermino').value;
+  if (!k) return toast('Elige la provincia y el municipio');
   if (!pol || !parc) return toast('Pon el polígono y la parcela');
-  try { localStorage.setItem('irPPTermino', k); } catch (er) {}
+  recordar('irPPProv', $('irPPProv').value);
+  recordar('irPPMuni', $('irPPTermino').selectedOptions[0].textContent);
   cerrarDlg('dlgIrPP');
   const [cp, cm] = k.split('-');
   abrirMapa({ sigpac: `${cp}-${cm}-${pol}-${parc}`, id_parcela: null }, true, true);   // la misma búsqueda que "Ir a la parcela"
