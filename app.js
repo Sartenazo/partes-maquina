@@ -321,11 +321,12 @@ document.querySelectorAll('.selector').forEach(b => b.addEventListener('click', 
 function abrirSelector(lista) {
   selActual = lista;
   $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea', tipotrabajo: 'Tipo Trabajo',
-    equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', irParcela: '🧭 Ir a la parcela (Google Maps)', parajes: '🗺 Parajes' + (muniNombre ? ' de ' + muniNombre : ''), parcelas: 'Parcela de ' + (parte.empresa || '') }[lista];
+    equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', irParcela: '🧭 Ir a la parcela (Google Maps)', parajes: '🗺 Buscar paraje' + (muniNombre ? ' · ' + muniNombre : ''), parcelas: 'Parcela de ' + ((parte && parte.empresa) || '') }[lista];
   $('selBuscar').value = '';
+  $('selBuscar').placeholder = lista === 'parajes' ? '🔎 Escribe el paraje (ej. Quimeras)…' : 'Buscar…';
   pintarSel();
   abrirDlg('dlgSelector');
-  if ((lista === 'parcelas' || lista === 'irParcela' ? parcelasEmpresa() : lista === 'parajes' ? parajesLista : listaCat(lista)).length > 8) setTimeout(() => $('selBuscar').focus(), 50);
+  if (lista === 'parajes' || (lista === 'parcelas' || lista === 'irParcela' ? parcelasEmpresa() : listaCat(lista)).length > 8) setTimeout(() => $('selBuscar').focus(), 50);
 }
 function pintarSel() {
   const q = normal($('selBuscar').value);
