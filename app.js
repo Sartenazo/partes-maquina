@@ -1110,6 +1110,7 @@ async function rcDeLinea(l) {
 async function abrirMapa(l, google, navegar) {
   // la ventana se abre ya (si no, el móvil la bloquea) y luego se le pone la dirección
   const w = window.open('', '_blank');
+  try { if (w && navigator.onLine) w.document.write('<meta name="viewport" content="width=device-width"><p style="font:20px sans-serif;padding:30px;text-align:center">🧭 Buscando el mejor camino hasta la parcela…</p>'); } catch (e) {}
   const ir = url => { if (w && !w.closed) w.location.href = url; else location.href = url; };
   const cerrar = () => { try { if (w) w.close(); } catch (e) {} };
   const ent = navegar ? entradaDe(l.id_parcela) : null;
@@ -1119,21 +1120,25 @@ async function abrirMapa(l, google, navegar) {
     cerrar(); return toast('Sin conexión: el mapa se puede ver cuando haya cobertura');
   }
   toast('Buscando la parcela en el Catastro…', 2000);
-  const r = await rcDeLinea(l);
+  const r = await Promise.race([rcDeLinea(l), limite(6000)]);
   if (!google) {
     if (r) return ir(`https://www1.sedecatastro.gob.es/Cartografia/mapa.aspx?refcat=${r.rc}&del=${+r.cp || ''}&mun=${+r.cm || ''}&final=&ZV=NO`);
     cerrar(); return toast('No encuentro esta parcela en el Catastro');
   }
   let lat = null, lon = null;
   if (r) {
-    const d = await pedirXML(`${OVC}OVCCoordenadas.asmx/Consulta_CPMRC?Provincia=&Municipio=&SRS=EPSG:4326&RC=${r.rc}`);
-    lat = tx(d, 'ycen'); lon = tx(d, 'xcen');
+    const guardado = await BD.leer('centro_' + r.rc).catch(() => null);
+    if (guardado) { lat = guardado.lat; lon = guardado.lon; }
+    else {
+      const d = await Promise.race([pedirXML(`${OVC}OVCCoordenadas.asmx/Consulta_CPMRC?Provincia=&Municipio=&SRS=EPSG:4326&RC=${r.rc}`).catch(() => null), limite(5000)]);
+      if (d) { lat = tx(d, 'ycen'); lon = tx(d, 'xcen'); if (lat) BD.guardar('centro_' + r.rc, { lat, lon }).catch(() => {}); }
+    }
   }
   if (!lat && l.lat != null) { lat = l.lat; lon = l.lon; }       // si no, donde se tomó el GPS
   if (!lat) { cerrar(); return toast('No tengo la ubicación de esta parcela'); }
   if (navegar && r) {
     toast('Buscando el mejor camino hasta la parcela…', 3000);
-    const m = await mejorDestino(r.rc, +lat, +lon).catch(() => null);
+    const m = await Promise.race([mejorDestino(r.rc, +lat, +lon).catch(() => null), limite(9000)]);   // como mucho 9 s
     if (m) { lat = m.lat; lon = m.lon; }
     toast(m ? m.texto : '🧭 Voy al centro de la parcela', 3000);
   }
@@ -1144,34 +1149,34 @@ async function abrirMapa(l, google, navegar) {
 // Candidatos: el centro de la parcela y el camino que linda con ella (Catastro / OpenStreetMap).
 // Para cada uno se calcula la ruta desde donde estás (OSRM, mapa de OpenStreetMap con caminos agrícolas) y
 // lo que queda "a pie" desde el último camino. Gana el de menos tiempo, contando el tramo sin camino como lento.
-function miPosicion(ms) {
-  return new Promise(r => navigator.geolocation
-    ? navigator.geolocation.getCurrentPosition(p => r(p.coords), () => r(null), { enableHighAccuracy: false, timeout: ms, maximumAge: 120000 })
-    : r(null));
-}
-async function rutaOSRM(o, d) {
-  const txt = await pedirTexto(`https://router.project-osrm.org/route/v1/driving/${o.longitude},${o.latitude};${d.lon},${d.lat}?overview=false`, 7000);
+function limite(ms) { return new Promise(r => setTimeout(() => r(null), ms)); }
+// Camino más cercano a un punto en el mapa de OpenStreetMap (incluye caminos agrícolas): un solo dato, rápido
+async function caminoCercano(p) {
+  const txt = await Promise.race([pedirTexto(`https://router.project-osrm.org/nearest/v1/driving/${p.lon},${p.lat}?number=1`, 4000), limite(4000)]);
   try { const j = JSON.parse(txt); if (j.code !== 'Ok') return null;
-    return { seg: j.routes[0].duration, sinCamino: j.waypoints[1].distance, llegada: { lon: j.waypoints[1].location[0], lat: j.waypoints[1].location[1] } };
+    const w = j.waypoints[0]; return { dist: w.distance, lat: w.location[1], lon: w.location[0] };
   } catch (e) { return null; }
 }
+// Mejor punto de llegada: el centro de la parcela o el camino del Catastro que linda con ella,
+// el que tenga un camino de verdad más cerca. Se guarda: la segunda vez es instantáneo.
 async function mejorDestino(rc, lat, lon) {
-  const [yo, acceso] = await Promise.all([miPosicion(8000), puntoAcceso(rc, lat, lon).catch(() => null)]);
-  const cands = [{ lat, lon, modo: 'centro' }];
-  if (acceso) cands.push(acceso);
-  if (!yo) return acceso ? Object.assign(acceso, { texto: '🧭 Destino: el camino que linda con la parcela' }) : null;
-  const rutas = await Promise.all(cands.map(c => rutaOSRM(yo, c)));
+  const guardado = await BD.leer('acceso_' + rc).catch(() => null);
+  if (guardado) return guardado;
+  const centro = { lat, lon };
+  const [cCentro, cam] = await Promise.all([
+    caminoCercano(centro),
+    Promise.race([(async () => { const c = await contornoParcela(rc); return c ? caminoCatastro(rc, c) : null; })().catch(() => null), limite(6000)])
+  ]);
+  const cCam = cam ? await caminoCercano(cam) : null;
   let mejor = null;
-  cands.forEach((c, i) => {
-    const r = rutas[i]; if (!r) return;
-    const coste = r.seg + r.sinCamino * 3;           // cada metro sin camino cuenta como 3 s (andando / campo a través)
-    if (!mejor || coste < mejor.coste) mejor = { c, r, coste };
-  });
-  if (!mejor) return acceso ? Object.assign(acceso, { texto: '🧭 Destino: el camino que linda con la parcela' }) : null;
-  // se manda a Google el punto del camino donde termina la ruta (si está cerca de la parcela)
-  const dest = mejor.r.sinCamino <= 400 ? mejor.r.llegada : mejor.c;
-  const fin = Math.round(mejor.r.sinCamino);
-  return { lat: dest.lat, lon: dest.lon, texto: '🧭 Destino: el camino más cercano a la parcela' + (fin > 30 ? ` (quedan unos ${fin} m sin camino)` : '') };
+  if (cCentro) mejor = { c: centro, n: cCentro };
+  if (cCam && (!mejor || cCam.dist < mejor.n.dist)) mejor = { c: cam, n: cCam };
+  if (!mejor) return cam ? { lat: cam.lat, lon: cam.lon, texto: '🧭 Destino: el camino que linda con la parcela' } : null;
+  const fin = Math.round(mejor.n.dist);
+  const dest = fin <= 400 ? mejor.n : mejor.c;
+  const res = { lat: dest.lat, lon: dest.lon, texto: '🧭 Destino: el camino más cercano a la parcela' + (fin > 30 ? ` (quedan unos ${fin} m sin camino)` : '') };
+  BD.guardar('acceso_' + rc, res).catch(() => {});
+  return res;
 }
 
 // ---------- Entrada de la parcela (la guarda un trabajador estando allí; la usan todos) ----------
@@ -1206,7 +1211,7 @@ async function pedirTexto(url, ms, opciones) {
 }
 async function contornoParcela(rc) {
   const xml = await pedirTexto('https://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx?service=wfs&version=2&request=getfeature' +
-    '&STOREDQUERIE_ID=GetParcel&refcat=' + encodeURIComponent(rc.slice(0, 14)) + '&srsname=EPSG::4326', 8000);
+    '&STOREDQUERIE_ID=GetParcel&refcat=' + encodeURIComponent(rc.slice(0, 14)) + '&srsname=EPSG::4326', 4000);
   if (!xml) return null;
   const m = xml.match(/<gml:posList[^>]*>([^<]+)<\/gml:posList>/);
   if (!m) return null;
@@ -1229,7 +1234,7 @@ async function caminoCatastro(rc, pol) {
   const la = pol.map(p => p.lat), lo = pol.map(p => p.lon), m = 0.0006;
   const bbox = [Math.min(...la) - m, Math.min(...lo) - m, Math.max(...la) + m, Math.max(...lo) + m].map(x => x.toFixed(6)).join(',');
   const xml = await pedirTexto('https://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx?service=wfs&version=2&request=getfeature' +
-    '&typenames=cp:CadastralParcel&bbox=' + bbox + ',urn:ogc:def:crs:EPSG::4326&srsname=EPSG::4326', 10000);
+    '&typenames=cp:CadastralParcel&bbox=' + bbox + ',urn:ogc:def:crs:EPSG::4326&srsname=EPSG::4326', 5000);
   if (!xml) return null;
   const vecinas = xml.split(/<member>|<wfs:member>/).slice(1).map(f => ({
     rc: (f.match(/<cp:nationalCadastralReference>([^<]+)</) || [])[1] || '',
@@ -1241,9 +1246,11 @@ async function caminoCatastro(rc, pol) {
   const segd = (a, b, p) => { const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
     let t = L ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L : 0; t = Math.max(0, Math.min(1, t)); return Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y); };
   let mejor = null;
-  for (const v of vecinas) {
-    // ¿es un camino? (no un arroyo o un canal)
-    const d = await pedirXML(`${OVC}OVCCallejero.asmx/Consulta_DNPRC?Provincia=&Municipio=&RC=${v.rc}`).catch(() => null);
+  // ¿son caminos? (no arroyos ni canales): se pregunta por todas a la vez
+  const descs = await Promise.all(vecinas.map(v => Promise.race([
+    pedirXML(`${OVC}OVCCallejero.asmx/Consulta_DNPRC?Provincia=&Municipio=&RC=${v.rc}`).catch(() => null), limite(3000)])));
+  for (const [iv, v] of vecinas.entries()) {
+    const d = descs[iv];
     const desc = d && d.documentElement ? d.documentElement.textContent.toUpperCase() : '';
     if (desc && /ARROYO|RIO |RÍO|CANAL|BARRANCO|RAMBLA|ACEQUIA|EMBALSE/.test(desc) && !/CAMINO|CARRETERA|VEREDA|CAÑADA|COLADA/.test(desc)) continue;
     const C = v.pts.map(P);
