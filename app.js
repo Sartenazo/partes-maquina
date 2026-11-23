@@ -17,8 +17,8 @@ let sesion = null, cat = null, parte = null, horas = null, gpsWatch = null, inst
 // unidad: unidad por defecto de cada parcela (null = la última usada) · kilos: texto del total
 const TIPOS = {
   maquina:      { nombre: 'Trabajos con máquinas', corto: 'Máquina', icono: '🚜', maquina: true, unidad: null, kilos: 'Kilos transportados' },
-  vendimiadora: { nombre: 'Vendimiadora', corto: 'Vendimiadora', icono: '🍇', unidad: 'Kilos', kilos: 'Kilos vendimiados' },
-  cosechadora:  { nombre: 'Cosechadora', corto: 'Cosechadora', icono: '🌾', cereal: true, unidad: 'Kilos', kilos: 'Kilos cosechados' },
+  vendimiadora: { nombre: 'Vendimiadora', corto: 'Vendimiadora', icono: '🍇', unidad: 'Hectareas', kilos: 'Kilos vendimiados' },
+  cosechadora:  { nombre: 'Cosechadora', corto: 'Cosechadora', icono: '🌾', cereal: true, unidad: 'Hectareas', kilos: 'Kilos cosechados' },
   tratamiento:  { nombre: 'Tratamientos', corto: 'Tratamiento', icono: '🧪', tratamiento: true, unidad: 'Hectareas', kilos: '' },
   terceros:     { nombre: 'Trabajos a terceros', corto: 'Terceros', icono: '🤝', terceros: true, unidad: null, kilos: '' }
 };
