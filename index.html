@@ -199,7 +199,11 @@
     <label>Matrícula / Reseña *</label>
     <button type="button" class="selector" id="rEquipo" data-lista="inventario">Elegir máquina…</button>
     <label>Denominación<input id="rDenom" maxlength="50" readonly placeholder="Se rellena al elegir la máquina"></label>
-    <label>Reparación *<textarea id="rRep" rows="3" maxlength="255" placeholder="¿Qué le pasa? (ej. pierde aceite la bomba)"></textarea></label>
+    <label for="rRep">Reparación *</label>
+    <div class="con-micro">
+      <textarea id="rRep" rows="3" maxlength="255" placeholder="¿Qué le pasa? Escribe o pulsa 🎤 y habla"></textarea>
+      <button type="button" class="micro" id="rMicro" data-micro="rRep" aria-label="Dictar con la voz">🎤</button>
+    </div>
     <label>Observaciones<textarea id="rObs" rows="2" maxlength="255"></textarea></label>
   </div>
   <button type="button" class="secundario" id="rInforme">📋 Informe de reparaciones pendientes</button>

@@ -243,3 +243,10 @@ label.check input { width: 24px; height: 24px; min-height: 0; margin: 0; }
 .rep-pie { margin-top: 4px; color: #777; font-size: .8em; }
 #rInforme { width: 100%; margin: 0 0 12px; }
 #rDenom[readonly] { background: #f3f3f3; }
+/* Micrófono (dictado por voz) */
+.con-micro { position: relative; margin-bottom: 12px; }
+.con-micro textarea { width: 100%; padding-right: 56px; box-sizing: border-box; margin: 0; }
+.micro { position: absolute; right: 6px; top: 6px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #ccc;
+  background: #fff; font-size: 22px; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center; }
+.micro.escuchando { background: #e53935; border-color: #e53935; animation: latido 1s infinite; }
+@keyframes latido { 50% { transform: scale(1.12); } }

@@ -1638,6 +1638,7 @@ function leerRep() {
   rep.observaciones = $('rObs').value.trim();
 }
 $('rEnviar').addEventListener('click', async () => {
+  if (window.pararDictado) pararDictado();
   leerRep();
   if (!rep.denominacion && !rep.matricula) return toast('Elige la máquina (Matrícula / Reseña)');
   if (!rep.reparacion) { $('rRep').focus(); return toast('Escribe la reparación (qué le pasa)'); }
@@ -1654,6 +1655,7 @@ $('rBorrar').addEventListener('click', async () => {
   await BD.borrarParte(rep.id); irInicio(); toast('Avería borrada');
 });
 async function salirRep() {
+  if (window.pararDictado) pararDictado();
   leerRep();
   if (rep.estado === 'nuevo') {
     if ((rep.reparacion || rep.denominacion) && !confirm('No has enviado la avería. ¿Salir sin guardarla?')) return;
@@ -1703,3 +1705,43 @@ $('infRepImprimir').addEventListener('click', () => {
     <script>setTimeout(function(){window.print()},300)<\/script></body></html>`);
   w.document.close();
 });
+
+// =====================================================================
+//  MICRÓFONO: dictado por voz (reconocimiento del propio teléfono, en español)
+// =====================================================================
+(function () {
+  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, boton = null;
+  function parar() { if (rec) { try { rec.stop(); } catch (e) {} } }
+  document.querySelectorAll('[data-micro]').forEach(b => b.addEventListener('click', () => {
+    if (!Rec) return toast('Este teléfono no permite dictar aquí: usa el 🎤 del teclado');
+    if (rec) { parar(); return; }
+    const campo = $(b.dataset.micro); if (!campo || campo.disabled) return;
+    const base = campo.value.trim();
+    rec = new Rec(); rec.lang = 'es-ES'; rec.interimResults = true; rec.continuous = true;
+    boton = b; b.classList.add('escuchando'); b.textContent = '⏹';
+    toast('Habla ahora… pulsa ⏹ para terminar');
+    let final = '';
+    rec.onresult = ev => {
+      let prov = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) final += (final ? ' ' : '') + t.trim(); else prov += t;
+      }
+      let txt = [base, final, prov.trim()].filter(Boolean).join(' ');
+      txt = txt.charAt(0).toUpperCase() + txt.slice(1);
+      campo.value = txt.slice(0, campo.maxLength > 0 ? campo.maxLength : 10000);
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    rec.onerror = ev => {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') toast('Da permiso al micrófono para esta aplicación');
+      else if (ev.error === 'network') toast('El dictado necesita cobertura: escribe a mano o usa el 🎤 del teclado');
+      else if (ev.error !== 'no-speech' && ev.error !== 'aborted') toast('No se pudo dictar (' + ev.error + ')');
+    };
+    rec.onend = () => { rec = null; if (boton) { boton.classList.remove('escuchando'); boton.textContent = '🎤'; } boton = null; };
+    try { rec.start(); } catch (e) { rec = null; b.classList.remove('escuchando'); b.textContent = '🎤'; }
+  }));
+  // al salir de la pantalla se deja de escuchar
+  document.addEventListener('visibilitychange', () => { if (document.hidden) parar(); });
+  window.pararDictado = parar;
+})();
