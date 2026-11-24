@@ -1599,7 +1599,7 @@ $('formIrPP').addEventListener('submit', e => {
 function filaRep(r) {
   const chip = r.estado === 'enviado' ? '<span class="chip enviado">Enviado</span>'
     : r.estado === 'error' ? '<span class="chip error">Error</span>' : '<span class="chip pendiente">Pendiente</span>';
-  return `<li data-id="${esc(r.id)}"><div class="txt"><b>🔧 ${esc(fechaES(r.fecha))} · ${esc(r.matricula || r.denominacion || 'Reparación')}</b>
+  return `<li data-id="${esc(r.id)}"><div class="txt"><b>${r.finalizado ? '✅' : '🔧'} ${esc(fechaES(r.fecha))} · ${esc(r.matricula || r.denominacion || 'Reparación')}</b>
     <span>${esc([r.matricula ? r.denominacion : '', r.reparacion].filter(Boolean).join(' · '))}</span></div>${chip}</li>`;
 }
 function nuevaRep() {
@@ -1611,7 +1611,7 @@ function abrirRep(r) {
   const ro = rep.estado === 'enviado';
   mostrar('vRep', 'Reparaciones Pendientes', ro ? 'Enviada a la oficina' : (sesion && sesion.nombre) || '');
   $('rFecha').value = rep.fecha || hoy();
-  $('rRep').value = rep.reparacion || ''; $('rObs').value = rep.observaciones || '';
+  $('rRep').value = rep.reparacion || ''; $('rObs').value = rep.observaciones || ''; $('rFin').checked = !!rep.finalizado;
   $('vRep').querySelectorAll('input, textarea, button').forEach(el => {
     if (!el.hasAttribute('data-volver') && el.id !== 'rInforme') el.disabled = ro;
   });
@@ -1636,6 +1636,7 @@ function leerRep() {
   rep.fecha = $('rFecha').value || hoy();
   rep.reparacion = $('rRep').value.trim();
   rep.observaciones = $('rObs').value.trim();
+  rep.finalizado = $('rFin').checked;
 }
 $('rEnviar').addEventListener('click', async () => {
   if (window.pararDictado) pararDictado();
@@ -1646,8 +1647,9 @@ $('rEnviar').addEventListener('click', async () => {
   if (!rep.creado_movil) rep.creado_movil = new Date().toISOString();
   rep.estado = 'pendiente'; delete rep.error;
   await BD.guardarParte(rep);
+  const hecha = rep.finalizado;
   irInicio();
-  toast(navigator.onLine ? 'Avería anotada. Enviando a la oficina…' : 'Avería guardada. Se enviará al tener cobertura.');
+  toast(hecha ? (navigator.onLine ? 'Reparación anotada como hecha. Enviando…' : 'Guardada. Se enviará al tener cobertura.') : navigator.onLine ? 'Avería anotada. Enviando a la oficina…' : 'Avería guardada. Se enviará al tener cobertura.');
   pedirEnvioSegundoPlano(); enviar();
 });
 $('rBorrar').addEventListener('click', async () => {
@@ -1669,7 +1671,7 @@ $('rInforme').addEventListener('click', async () => {
   abrirDlg('dlgInfRep');
   $('infRepLista').innerHTML = '';
   $('infRepEstado').textContent = 'Cargando…';
-  const locales = (await BD.partes()).filter(p => p.tipo === 'reparacion' && p.estado !== 'enviado' && p.estado !== 'nuevo')
+  const locales = (await BD.partes()).filter(p => p.tipo === 'reparacion' && p.estado !== 'enviado' && p.estado !== 'nuevo' && !p.finalizado)
     .map(p => ({ local: true, fecha: p.fecha, matricula: p.matricula, denominacion: p.denominacion, reparacion: p.reparacion, observaciones: p.observaciones, trabajador: sesion && sesion.nombre }));
   let nube = null, nota = '';
   try { nube = await Sync.reparacionesPendientes(); await BD.guardar('reparacionesNube', { fecha: new Date().toISOString(), lista: nube }); }
@@ -1684,15 +1686,37 @@ $('rInforme').addEventListener('click', async () => {
   $('infRepLista').innerHTML = htmlInfRep(infRep);
 });
 function htmlInfRep(lista) {
-  return lista.map(r => `<div class="rep-item">
+  return lista.map((r, i) => `<div class="rep-item">
     <div class="rep-cab"><b>${esc(r.matricula ? r.matricula + ' · ' : '')}${esc(r.denominacion || '')}</b>
       <span>${r.n_registro ? 'Nº ' + esc(String(r.n_registro).padStart(4, '0')) + '/' + esc(r.anio || '') + ' · ' : ''}${esc(fechaES(r.fecha))}</span></div>
     <div class="rep-txt">${esc(r.reparacion || '')}</div>
     ${r.observaciones ? `<div class="rep-obs">${esc(r.observaciones)}</div>` : ''}
+    ${r.local ? '' : `<button type="button" class="rep-fin" data-fin="${i}">✅ Reparada</button>`}
     <div class="rep-pie">${r.local ? '⏳ Anotada en este móvil, sin enviar' : r.origen === 'movil' ? '📱 Anotada por ' + esc(r.trabajador || 'un trabajador') + (r.importado ? '' : ' · aún no la ha recogido la oficina') : '🏢 Oficina'}</div>
   </div>`).join('');
 }
 $('infRepCerrar').addEventListener('click', () => cerrarDlg('dlgInfRep'));
+$('infRepLista').addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-fin]'); if (!b) return;
+  const r = infRep[+b.dataset.fin]; if (!r) return;
+  if (!confirm('¿Marcar como REPARADA?\n\n' + (r.matricula ? r.matricula + ' · ' : '') + (r.denominacion || '') + '\n' + (r.reparacion || '') +
+    '\n\nEn la oficina quedará como Finalizado.')) return;
+  if (!navigator.onLine) return toast('Necesitas cobertura para marcarla como reparada');
+  b.disabled = true; b.textContent = 'Guardando…';
+  try {
+    const res = await Sync.finalizarReparacion(r.id, r.id_access);
+    if (res.estado === 'no_encontrada') { toast('La lista ha cambiado: cierra y vuelve a abrir el informe'); b.disabled = false; b.textContent = '✅ Reparada'; return; }
+    infRep = infRep.filter(x => x !== r);
+    const g = await BD.leer('reparacionesNube');
+    if (g) { g.lista = (g.lista || []).filter(x => x.id !== r.id); await BD.guardar('reparacionesNube', g); }
+    $('infRepLista').innerHTML = htmlInfRep(infRep);
+    $('infRepEstado').textContent = infRep.length ? infRep.length + ' reparación' + (infRep.length === 1 ? '' : 'es') + ' sin finalizar.' : 'No hay reparaciones pendientes 👍';
+    toast('✅ Marcada como reparada');
+  } catch (e) {
+    b.disabled = false; b.textContent = '✅ Reparada';
+    toast('No se pudo guardar: ' + (e.message || e));
+  }
+});
 $('infRepImprimir').addEventListener('click', () => {
   const w = window.open('', '_blank'); if (!w) return toast('No se pudo abrir la ventana de impresión');
   const filas = infRep.map(r => `<tr><td>${r.n_registro ? String(r.n_registro).padStart(4, '0') + '/' + (r.anio || '') : ''}</td><td>${esc(fechaES(r.fecha))}</td>

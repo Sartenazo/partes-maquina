@@ -94,7 +94,17 @@
       const s = await g.BD.leer('sesion');
       if (!s || s.demo) return (g.CATALOGO_DEMO && g.CATALOGO_DEMO.reparaciones) || [];
       return conToken(tk => leerTabla('reparaciones?finalizado=is.false', tk, 'denominacion,fecha',
-        'origen,trabajador,n_registro,anio,denominacion,matricula,fecha,reparacion,observaciones,importado'));
+        'id,id_access,origen,trabajador,n_registro,anio,denominacion,matricula,fecha,reparacion,observaciones,importado'));
+    },
+
+    // ✅ Marcar una reparación como reparada (Finalizado en Access)
+    async finalizarReparacion(id, idAccess) {
+      const s = await g.BD.leer('sesion');
+      if (!s || s.demo) return { estado: 'finalizada' };
+      const { datos } = await conToken(tk => peticion('/rest/v1/rpc/finalizar_reparacion', {
+        metodo: 'POST', token: tk, cuerpo: { p_id: id, p_id_access: idAccess || null }
+      }));
+      return datos || {};
     },
 
     // Zona (GeoJSON) de un paraje
@@ -244,7 +254,7 @@
   function aEnvioRep(r) {
     return {
       id: r.id, fecha: r.fecha, denominacion: r.denominacion || '', matricula: r.matricula || '', clase: r.clase || '',
-      reparacion: r.reparacion || '', observaciones: r.observaciones || '',
+      reparacion: r.reparacion || '', observaciones: r.observaciones || '', finalizado: !!r.finalizado,
       lat: r.gps ? r.gps.lat : '', lon: r.gps ? r.gps.lon : '', creado_movil: r.creado_movil
     };
   }
