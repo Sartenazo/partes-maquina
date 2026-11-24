@@ -11,7 +11,7 @@ const fmt = n => (n === '' || n == null) ? '' : (+n).toLocaleString('es-ES', { m
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() :
   'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
 
-let sesion = null, cat = null, parte = null, horas = null, gpsWatch = null, instalarEvt = null;
+let sesion = null, cat = null, parte = null, horas = null, rep = null, gpsWatch = null, instalarEvt = null;
 
 // ---------- tipos de parte ----------
 // unidad: unidad por defecto de cada parcela (null = la última usada) · kilos: texto del total
@@ -66,10 +66,10 @@ function toast(msg, ms = 2600) {
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add('oculto'), ms);
 }
 function mostrar(vista, titulo, sub) {
-  for (const v of ['vLogin', 'vInicio', 'vParte', 'vHoras']) $(v).classList.toggle('oculto', v !== vista);
+  for (const v of ['vLogin', 'vInicio', 'vParte', 'vHoras', 'vRep']) $(v).classList.toggle('oculto', v !== vista);
   $('tituloPantalla').textContent = titulo || 'Partes de trabajo';
   $('subtitulo').textContent = sub || '';
-  $('btnAtras').classList.toggle('oculto', vista !== 'vParte' && vista !== 'vHoras');
+  $('btnAtras').classList.toggle('oculto', vista !== 'vParte' && vista !== 'vHoras' && vista !== 'vRep');
   $('btnMenu').classList.toggle('oculto', vista !== 'vInicio');
   window.scrollTo(0, 0);
 }
@@ -136,7 +136,7 @@ $('btnDemo').addEventListener('click', async () => {
 // ---------- inicio ----------
 function irInicio() {
   pararGps(); pararReloj(); pararVigilancia();
-  parte = null; horas = null;
+  parte = null; horas = null; rep = null;
   mostrar('vInicio', 'Partes de trabajo', sesion.nombre);
   pintarTipos();
   $('avisoDemo').classList.toggle('oculto', !sesion.demo);
@@ -167,6 +167,7 @@ async function pintarInicio() {
 
 function filaParte(p) {
   if (p.tipo === 'horas') return filaHoras(p);
+  if (p.tipo === 'reparacion') return filaRep(p);
   const n = (p.lineas || []).length;
   const chip = p.estado === 'enviado' ? '<span class="chip enviado">Enviado</span>'
     : p.estado === 'error' ? '<span class="chip error">Error</span>'
@@ -182,16 +183,17 @@ function filaParte(p) {
 ['listaCurso', 'listaPendientes', 'listaEnviados'].forEach(id => $(id).addEventListener('click', async e => {
   const li = e.target.closest('li[data-id]'); if (!li) return;
   const p = await BD.parte(li.dataset.id);
-  if (p && p.tipo === 'horas') abrirHoras(p); else abrirParte(p);
+  if (p && p.tipo === 'horas') abrirHoras(p); else if (p && p.tipo === 'reparacion') abrirRep(p); else abrirParte(p);
 }));
 
 function pintarTipos() {
   $('tiposParte').innerHTML = Object.entries(TIPOS).map(([k, t]) =>
     `<button type="button" class="tipo" data-tipo="${k}"><span>${t.icono}</span>${esc(t.nombre)}</button>`).join('') +
     `<button type="button" class="tipo" data-tipo="horas"><span>⏱</span>Mis horas</button>` +
+    `<button type="button" class="tipo" data-tipo="reparacion"><span>🔧</span>Reparaciones Pendientes</button>` +
     PROXIMOS.map(([i, n]) => `<button type="button" class="tipo pronto" disabled><span>${i}</span>${esc(n)}<small>Próximamente</small></button>`).join('');
 }
-$('tiposParte').addEventListener('click', e => { const b = e.target.closest('button[data-tipo]'); if (!b) return; if (b.dataset.tipo === 'horas') nuevasHoras(); else nuevoParte(b.dataset.tipo); });
+$('tiposParte').addEventListener('click', e => { const b = e.target.closest('button[data-tipo]'); if (!b) return; if (b.dataset.tipo === 'horas') nuevasHoras(); else if (b.dataset.tipo === 'reparacion') nuevaRep(); else nuevoParte(b.dataset.tipo); });
 async function nuevoParte(tipo) {
   const t = TIPOS[tipo];
   const curso = (await BD.partes()).filter(p => p.estado === 'en_curso' && ((p.tipo || 'maquina') === tipo));
@@ -320,7 +322,7 @@ document.querySelectorAll('.selector').forEach(b => b.addEventListener('click', 
 
 function abrirSelector(lista) {
   selActual = lista;
-  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea', tipotrabajo: 'Tipo Trabajo',
+  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea', tipotrabajo: 'Tipo Trabajo', inventario: 'Matrícula / Reseña',
     equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', irParcela: '🧭 Ir a la parcela (Google Maps)', parajes: '🗺 Buscar paraje' + (muniNombre ? ' · ' + muniNombre : ''), parcelas: 'Parcela de ' + ((parte && parte.empresa) || '') }[lista];
   $('selBuscar').value = '';
   $('selBuscar').placeholder = lista === 'parajes' ? '🔎 Escribe el paraje (ej. Quimeras)…' : 'Buscar…';
@@ -359,6 +361,13 @@ function pintarSel() {
       : '<li class="vacio">' + (lin.length + otras.length ? 'Ninguna parcela coincide con la búsqueda' : 'No hay parcelas con ubicación para esta empresa') + '</li>';
     return;
   }
+  if (selActual === 'inventario') {
+    const items = listaCat('inventario').filter(x => !q || normal([x.matricula, x.denominacion, x.clase].join(' ')).includes(q));
+    $('selLista').innerHTML = items.length ? items.map(x =>
+      `<li data-id="${x.id}" class="${rep && String(rep.id_equipo) === String(x.id) ? 'marcado' : ''}"><div class="txt"><b>${esc(x.matricula || '—')} · ${esc(x.denominacion || '')}</b>${x.clase ? `<span>${esc(x.clase)}</span>` : ''}</div></li>`).join('')
+      : '<li class="vacio">' + (listaCat('inventario').length ? 'Nada coincide con la búsqueda' : 'La lista está vacía: pide en la oficina que pulsen "Enviar listas al móvil"') + '</li>';
+    return;
+  }
   const actual = { empresas: parte.empresa, faenas: parte.faena, clases: parte.clase, cereales: parte.cereal, tareas: parte.faena, tipotrabajo: parte.faena, equipos: parte.maquina }[selActual];
   const yaProd = new Set((parte.productos || []).map(x => String(x.id_producto)));
   const items = listaCat(selActual).filter(x => !q || normal(x.nombre + ' ' + (x.cif || '') + ' ' + (x.registro || '')).includes(q));
@@ -380,6 +389,12 @@ $('selLista').addEventListener('click', e => {
     cerrarDlg('dlgSelector');
     const x = parajesLista.find(p => String(p.id) === li.dataset.id);
     return x && mostrarParaje(x);
+  }
+  if (selActual === 'inventario') {
+    cerrarDlg('dlgSelector');
+    const x = listaCat('inventario').find(i => String(i.id) === li.dataset.id);
+    if (x && rep) { rep.id_equipo = x.id; rep.matricula = x.matricula || ''; rep.denominacion = x.denominacion || ''; rep.clase = x.clase || ''; pintarRep(); }
+    return;
   }
   if (selActual === 'irParcela') {
     cerrarDlg('dlgSelector');
@@ -1025,6 +1040,7 @@ $('btnBorrarParte').addEventListener('click', async () => {
 document.querySelectorAll('[data-volver]').forEach(b => b.addEventListener('click', () => $('btnAtras').click()));
 $('btnAtras').addEventListener('click', async () => {
   if (horas) return salirHoras();
+  if (rep) return salirRep();
   if (parte && parte.estado === 'nuevo' && (parte.id_empresa || parte.lineas.length) &&
       !confirm('Este parte aún no está guardado. ¿Salir sin guardar?')) return;
   if (parte && !soloLectura() && parte.estado !== 'nuevo') { leerFormulario(); await BD.guardarParte(parte); }
@@ -1574,4 +1590,116 @@ $('formIrPP').addEventListener('submit', e => {
   cerrarDlg('dlgIrPP');
   const [cp, cm] = k.split('-');
   abrirMapa({ sigpac: `${cp}-${cm}-${pol}-${parc}`, id_parcela: null }, true, true);   // la misma búsqueda que "Ir a la parcela"
+});
+
+// =====================================================================
+//  REPARACIONES PENDIENTES: el trabajador anota una avería y la oficina
+//  la recibe en Frm Reparaciones Pendientes. Con 📋 ve el informe de pendientes.
+// =====================================================================
+function filaRep(r) {
+  const chip = r.estado === 'enviado' ? '<span class="chip enviado">Enviado</span>'
+    : r.estado === 'error' ? '<span class="chip error">Error</span>' : '<span class="chip pendiente">Pendiente</span>';
+  return `<li data-id="${esc(r.id)}"><div class="txt"><b>🔧 ${esc(fechaES(r.fecha))} · ${esc(r.matricula || r.denominacion || 'Reparación')}</b>
+    <span>${esc([r.matricula ? r.denominacion : '', r.reparacion].filter(Boolean).join(' · '))}</span></div>${chip}</li>`;
+}
+function nuevaRep() {
+  abrirRep({ id: uuid(), tipo: 'reparacion', estado: 'nuevo', fecha: hoy(), id_equipo: null, matricula: '', denominacion: '', clase: '',
+    reparacion: '', observaciones: '', gps: null, creado_movil: null });
+}
+function abrirRep(r) {
+  rep = JSON.parse(JSON.stringify(r)); parte = null; horas = null;
+  const ro = rep.estado === 'enviado';
+  mostrar('vRep', 'Reparaciones Pendientes', ro ? 'Enviada a la oficina' : (sesion && sesion.nombre) || '');
+  $('rFecha').value = rep.fecha || hoy();
+  $('rRep').value = rep.reparacion || ''; $('rObs').value = rep.observaciones || '';
+  $('vRep').querySelectorAll('input, textarea, button').forEach(el => {
+    if (!el.hasAttribute('data-volver') && el.id !== 'rInforme') el.disabled = ro;
+  });
+  $('rDenom').disabled = false; $('rDenom').readOnly = true;
+  $('rEnviar').classList.toggle('oculto', ro);
+  $('rBorrar').classList.toggle('oculto', ro || rep.estado === 'nuevo');
+  $('repError').textContent = rep.estado === 'error' ? 'No se pudo enviar: ' + (rep.error || '') : '';
+  $('repError').classList.toggle('oculto', rep.estado !== 'error');
+  pintarRep();
+  if (!ro && !rep.gps && 'geolocation' in navigator) {
+    const r0 = rep;
+    navigator.geolocation.getCurrentPosition(pos => { r0.gps = { lat: pos.coords.latitude, lon: pos.coords.longitude }; },
+      () => {}, { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 });
+  }
+}
+function pintarRep() {
+  const t = rep.matricula ? rep.matricula + ' · ' + rep.denominacion : rep.denominacion;
+  pintarSelector('rEquipo', t, 'Elegir máquina…');
+  $('rDenom').value = rep.denominacion || '';
+}
+function leerRep() {
+  rep.fecha = $('rFecha').value || hoy();
+  rep.reparacion = $('rRep').value.trim();
+  rep.observaciones = $('rObs').value.trim();
+}
+$('rEnviar').addEventListener('click', async () => {
+  leerRep();
+  if (!rep.denominacion && !rep.matricula) return toast('Elige la máquina (Matrícula / Reseña)');
+  if (!rep.reparacion) { $('rRep').focus(); return toast('Escribe la reparación (qué le pasa)'); }
+  if (rep.fecha > hoy()) return toast('La fecha no puede ser posterior a hoy');
+  if (!rep.creado_movil) rep.creado_movil = new Date().toISOString();
+  rep.estado = 'pendiente'; delete rep.error;
+  await BD.guardarParte(rep);
+  irInicio();
+  toast(navigator.onLine ? 'Avería anotada. Enviando a la oficina…' : 'Avería guardada. Se enviará al tener cobertura.');
+  pedirEnvioSegundoPlano(); enviar();
+});
+$('rBorrar').addEventListener('click', async () => {
+  if (!confirm('¿Borrar esta avería? Aún no se ha enviado a la oficina.')) return;
+  await BD.borrarParte(rep.id); irInicio(); toast('Avería borrada');
+});
+async function salirRep() {
+  leerRep();
+  if (rep.estado === 'nuevo') {
+    if ((rep.reparacion || rep.denominacion) && !confirm('No has enviado la avería. ¿Salir sin guardarla?')) return;
+  } else if (rep.estado !== 'enviado') { await BD.guardarParte(rep); }
+  irInicio();
+}
+
+// --- informe de reparaciones pendientes ---
+let infRep = [];
+$('rInforme').addEventListener('click', async () => {
+  abrirDlg('dlgInfRep');
+  $('infRepLista').innerHTML = '';
+  $('infRepEstado').textContent = 'Cargando…';
+  const locales = (await BD.partes()).filter(p => p.tipo === 'reparacion' && p.estado !== 'enviado' && p.estado !== 'nuevo')
+    .map(p => ({ local: true, fecha: p.fecha, matricula: p.matricula, denominacion: p.denominacion, reparacion: p.reparacion, observaciones: p.observaciones, trabajador: sesion && sesion.nombre }));
+  let nube = null, nota = '';
+  try { nube = await Sync.reparacionesPendientes(); await BD.guardar('reparacionesNube', { fecha: new Date().toISOString(), lista: nube }); }
+  catch (e) {
+    const g = await BD.leer('reparacionesNube');
+    nube = g ? g.lista : [];
+    nota = g ? 'Sin conexión: es la lista del ' + new Date(g.fecha).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) + '.' : 'Sin conexión: no se ha podido cargar la lista de la oficina.';
+  }
+  infRep = locales.concat(nube || []).sort((a, b) =>
+    (a.denominacion || '').localeCompare(b.denominacion || '', 'es') || String(a.fecha || '').localeCompare(String(b.fecha || '')));
+  $('infRepEstado').textContent = (infRep.length ? infRep.length + ' reparación' + (infRep.length === 1 ? '' : 'es') + ' sin finalizar.' : 'No hay reparaciones pendientes 👍') + (nota ? ' ' + nota : '');
+  $('infRepLista').innerHTML = htmlInfRep(infRep);
+});
+function htmlInfRep(lista) {
+  return lista.map(r => `<div class="rep-item">
+    <div class="rep-cab"><b>${esc(r.matricula ? r.matricula + ' · ' : '')}${esc(r.denominacion || '')}</b>
+      <span>${r.n_registro ? 'Nº ' + esc(String(r.n_registro).padStart(4, '0')) + '/' + esc(r.anio || '') + ' · ' : ''}${esc(fechaES(r.fecha))}</span></div>
+    <div class="rep-txt">${esc(r.reparacion || '')}</div>
+    ${r.observaciones ? `<div class="rep-obs">${esc(r.observaciones)}</div>` : ''}
+    <div class="rep-pie">${r.local ? '⏳ Anotada en este móvil, sin enviar' : r.origen === 'movil' ? '📱 Anotada por ' + esc(r.trabajador || 'un trabajador') + (r.importado ? '' : ' · aún no la ha recogido la oficina') : '🏢 Oficina'}</div>
+  </div>`).join('');
+}
+$('infRepCerrar').addEventListener('click', () => cerrarDlg('dlgInfRep'));
+$('infRepImprimir').addEventListener('click', () => {
+  const w = window.open('', '_blank'); if (!w) return toast('No se pudo abrir la ventana de impresión');
+  const filas = infRep.map(r => `<tr><td>${r.n_registro ? String(r.n_registro).padStart(4, '0') + '/' + (r.anio || '') : ''}</td><td>${esc(fechaES(r.fecha))}</td>
+    <td>${esc(r.matricula || '')}</td><td>${esc(r.denominacion || '')}</td><td>${esc(r.reparacion || '')}</td><td>${esc(r.observaciones || '')}</td></tr>`).join('');
+  w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reparaciones pendientes</title>
+    <style>body{font-family:Arial,sans-serif;margin:16px}h2{margin:0 0 4px}p{margin:0 0 12px;color:#555}table{border-collapse:collapse;width:100%;font-size:13px}
+    th,td{border:1px solid #999;padding:4px 6px;text-align:left;vertical-align:top}th{background:#6b1e2b;color:#fff}</style></head><body>
+    <h2>Reparaciones Pendientes</h2><p>${esc(new Date().toLocaleDateString('es-ES'))} · ${infRep.length} sin finalizar</p>
+    <table><tr><th>Nº Registro</th><th>Fecha</th><th>Matrícula</th><th>Denominación</th><th>Reparación</th><th>Observaciones</th></tr>${filas}</table>
+    <script>setTimeout(function(){window.print()},300)<\/script></body></html>`);
+  w.document.close();
 });

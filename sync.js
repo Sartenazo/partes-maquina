@@ -78,7 +78,7 @@
   async function leerTabla(tabla, tk, orden, campos) {
     const todas = [];
     for (let desde = 0; ; desde += 1000) {
-      const { datos } = await peticion('/rest/v1/' + tabla + '?select=' + (campos || '*') + '&order=' + orden, {
+      const { datos } = await peticion('/rest/v1/' + tabla + (tabla.includes('?') ? '&' : '?') + 'select=' + (campos || '*') + '&order=' + orden, {
         token: tk, cabeceras: { Range: desde + '-' + (desde + 999) }
       });
       todas.push(...datos);
@@ -88,6 +88,14 @@
 
   g.Sync = {
     configurado,
+
+    // Reparaciones sin finalizar (las de la oficina y las anotadas en los móviles)
+    async reparacionesPendientes() {
+      const s = await g.BD.leer('sesion');
+      if (!s || s.demo) return (g.CATALOGO_DEMO && g.CATALOGO_DEMO.reparaciones) || [];
+      return conToken(tk => leerTabla('reparaciones?finalizado=is.false', tk, 'denominacion,fecha',
+        'origen,trabajador,n_registro,anio,denominacion,matricula,fecha,reparacion,observaciones,importado'));
+    },
 
     // Zona (GeoJSON) de un paraje
     async zonaParaje(id) {
@@ -159,7 +167,7 @@
       if (s && s.demo) return g.BD.leer('catalogos');
       return conToken(async tk => {
         // clases = Máquina (Claseequipamiento) · faenas = Tipo Trabajo (Clasefaena)
-        const [empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas, parajes] = await Promise.all([
+        const [empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas, parajes, inventario] = await Promise.all([
           leerTabla('cat_empresas', tk, 'nombre'),
           leerTabla('cat_parcelas', tk, 'poligono,parcela'),
           leerTabla('cat_faenas', tk, 'nombre'),
@@ -171,9 +179,10 @@
           leerTabla('cat_maquinas', tk, 'nombre').catch(() => []),
           leerTabla('cat_tipotrabajo', tk, 'nombre').catch(() => []),
           leerTabla('parcelas_entrada', tk, 'id_parcela').catch(() => []),
-          leerTabla('parajes', tk, 'nombre', 'id,ine,municipio,nombre,n_parcelas,superficie_ha,centro_lat,centro_lon').catch(() => [])
+          leerTabla('parajes', tk, 'nombre', 'id,ine,municipio,nombre,n_parcelas,superficie_ha,centro_lat,centro_lon').catch(() => []),
+          leerTabla('cat_inventario', tk, 'denominacion').catch(() => [])
         ]);
-        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas, parajes, fecha: new Date().toISOString() };
+        const cat = { empresas, parcelas, faenas, clases, unidades, cereales, productos, tareas, maquinas, tipotrabajo, entradas, parajes, inventario, fecha: new Date().toISOString() };
         await g.BD.guardar('catalogos', cat);
         return cat;
       });
@@ -193,15 +202,15 @@
               if (g.navigator && g.navigator.onLine === false) throw new TypeError('offline');
               await new Promise(r => setTimeout(r, 400));
             } else {
-              const horas = p.tipo === 'horas';
-              await conToken(tk => peticion('/rest/v1/rpc/' + (horas ? 'registrar_horas' : 'registrar_parte'), {
-                metodo: 'POST', token: tk, cuerpo: { p: horas ? aEnvioHoras(p) : aEnvio(p) }
+              const horas = p.tipo === 'horas', repa = p.tipo === 'reparacion';
+              await conToken(tk => peticion('/rest/v1/rpc/' + (horas ? 'registrar_horas' : repa ? 'registrar_reparacion' : 'registrar_parte'), {
+                metodo: 'POST', token: tk, cuerpo: { p: horas ? aEnvioHoras(p) : repa ? aEnvioRep(p) : aEnvio(p) }
               }));
             }
             p.estado = 'enviado'; p.enviado = new Date().toISOString(); delete p.error;
             await g.BD.guardarParte(p);
             res.enviados++;
-            if (!s.demo) g.Sync.borrarBorrador(p.id).catch(() => {});   // la copia del parte en curso ya no hace falta
+            if (!s.demo && p.tipo !== 'reparacion') g.Sync.borrarBorrador(p.id).catch(() => {});   // la copia del parte en curso ya no hace falta
           } catch (e) {
             if (e instanceof TypeError || !e.status) { res.sinConexion = true; break; } // sin red
             // fallos pasajeros (servidor despertando, sesión renovándose...): se queda pendiente y se reintenta solo
@@ -229,6 +238,14 @@
       horas: h.horas === '' || h.horas == null ? '' : h.horas,
       vacaciones: !!h.vacaciones, baja_medica: !!h.baja_medica, observaciones: h.observaciones || '',
       lat: h.gps ? h.gps.lat : '', lon: h.gps ? h.gps.lon : '', creado_movil: h.creado_movil
+    };
+  }
+
+  function aEnvioRep(r) {
+    return {
+      id: r.id, fecha: r.fecha, denominacion: r.denominacion || '', matricula: r.matricula || '', clase: r.clase || '',
+      reparacion: r.reparacion || '', observaciones: r.observaciones || '',
+      lat: r.gps ? r.gps.lat : '', lon: r.gps ? r.gps.lon : '', creado_movil: r.creado_movil
     };
   }
 

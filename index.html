@@ -191,6 +191,26 @@
   </div>
 </main>
 
+<!-- ===== REPARACIONES PENDIENTES ===== -->
+<main id="vRep" class="vista oculto">
+  <div class="tarjeta">
+    <p class="nota">Si ves una avería, apúntala aquí: llega a la oficina (Reparaciones Pendientes) para que sepan lo que hay que reparar.</p>
+    <label>Fecha orden reparación<input id="rFecha" type="date"></label>
+    <label>Matrícula / Reseña *</label>
+    <button type="button" class="selector" id="rEquipo" data-lista="inventario">Elegir máquina…</button>
+    <label>Denominación<input id="rDenom" maxlength="50" readonly placeholder="Se rellena al elegir la máquina"></label>
+    <label>Reparación *<textarea id="rRep" rows="3" maxlength="255" placeholder="¿Qué le pasa? (ej. pierde aceite la bomba)"></textarea></label>
+    <label>Observaciones<textarea id="rObs" rows="2" maxlength="255"></textarea></label>
+  </div>
+  <button type="button" class="secundario" id="rInforme">📋 Informe de reparaciones pendientes</button>
+  <p id="repError" class="error oculto"></p>
+  <div class="pie-fijo">
+    <button type="button" class="secundario volver" data-volver>‹ Volver</button>
+    <button type="button" class="peligro oculto" id="rBorrar">Borrar</button>
+    <button type="button" class="principal" id="rEnviar">✔ Enviar a la oficina</button>
+  </div>
+</main>
+
 <!-- ===== SELECTOR (lista con buscador) ===== -->
 <div id="dlgIrPP" class="dialogo oculto" role="dialog" aria-modal="true">
   <form class="dialogo-caja" id="formIrPP" novalidate>
@@ -221,6 +241,18 @@
       <button type="button" class="secundario" id="parajeOtro">🔎 Otro paraje</button>
       <button type="button" class="principal" id="parajeIr">🧭 Cómo llegar</button>
     </div>
+  </div>
+</div>
+
+<div id="dlgInfRep" class="dialogo oculto" role="dialog" aria-modal="true">
+  <div class="dialogo-caja informe-rep">
+    <div class="dialogo-cabecera">
+      <strong>📋 Reparaciones pendientes</strong>
+      <button type="button" class="icono" id="infRepCerrar" aria-label="Cerrar">✕</button>
+    </div>
+    <p id="infRepEstado" class="nota"></p>
+    <div id="infRepLista"></div>
+    <button type="button" class="secundario" id="infRepImprimir">🖨 Imprimir / guardar PDF</button>
   </div>
 </div>
 
