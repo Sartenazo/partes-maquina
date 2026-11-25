@@ -260,3 +260,5 @@ label.check input { width: 24px; height: 24px; min-height: 0; margin: 0; }
 #selLista li.inv-fila span { overflow-wrap: anywhere; }
 #selLista li.inv-fila span:first-child { font-weight: 600; }
 #selLista li.inv-fila span:last-child { color: #555; }
+#selLista li.inv-fila { font-size: .82em; gap: 6px; padding-top: 8px; padding-bottom: 8px; }
+#selLista li.inv-cab { font-size: .7em; gap: 6px; }
