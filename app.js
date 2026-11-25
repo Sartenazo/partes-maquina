@@ -322,10 +322,10 @@ document.querySelectorAll('.selector').forEach(b => b.addEventListener('click', 
 
 function abrirSelector(lista) {
   selActual = lista;
-  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea', tipotrabajo: 'Tipo Trabajo', inventario: 'Matrícula / Reseña',
+  $('selTitulo').textContent = { empresas: 'Empresa / cliente', faenas: 'Tipo Trabajo', clases: 'Máquina', cereales: 'Cereal', tareas: 'Tipo de tarea', tipotrabajo: 'Tipo Trabajo', inventario: 'Máquina',
     equipos: 'Equipo', productos: 'Producto', fichas: 'Ver ficha oficial del producto', irParcela: '🧭 Ir a la parcela (Google Maps)', parajes: '🗺 Buscar paraje' + (muniNombre ? ' · ' + muniNombre : ''), parcelas: 'Parcela de ' + ((parte && parte.empresa) || '') }[lista];
   $('selBuscar').value = '';
-  $('selBuscar').placeholder = lista === 'parajes' ? '🔎 Escribe el paraje (ej. Quimeras)…' : 'Buscar…';
+  $('selBuscar').placeholder = lista === 'parajes' ? '🔎 Escribe el paraje (ej. Quimeras)…' : lista === 'inventario' ? '🔎 Escribe la clase (ej. Tractor)…' : 'Buscar…';
   pintarSel();
   abrirDlg('dlgSelector');
   if (lista === 'parajes' || (lista === 'parcelas' || lista === 'irParcela' ? parcelasEmpresa() : listaCat(lista)).length > 8) setTimeout(() => $('selBuscar').focus(), 50);
@@ -362,10 +362,15 @@ function pintarSel() {
     return;
   }
   if (selActual === 'inventario') {
-    const items = listaCat('inventario').filter(x => !q || normal([x.matricula, x.denominacion, x.clase].join(' ')).includes(q));
-    $('selLista').innerHTML = items.length ? items.map(x =>
-      `<li data-id="${x.id}" class="${rep && String(rep.id_equipo) === String(x.id) ? 'marcado' : ''}"><div class="txt"><b>${esc(x.matricula || '—')} · ${esc(x.denominacion || '')}</b>${x.clase ? `<span>${esc(x.clase)}</span>` : ''}</div></li>`).join('')
-      : '<li class="vacio">' + (listaCat('inventario').length ? 'Nada coincide con la búsqueda' : 'La lista está vacía: pide en la oficina que pulsen "Enviar listas al móvil"') + '</li>';
+    // se busca por la clase; si ninguna clase coincide, también por denominación o matrícula
+    const todos = listaCat('inventario').slice().sort((a, b) =>
+      (a.clase || '').localeCompare(b.clase || '', 'es') || (a.denominacion || '').localeCompare(b.denominacion || '', 'es'));
+    let items = todos.filter(x => !q || normal(x.clase || '').includes(q));
+    if (q && !items.length) items = todos.filter(x => normal([x.denominacion, x.matricula].join(' ')).includes(q));
+    $('selLista').innerHTML = (items.length ? '<li class="inv-cab"><span>Clase</span><span>Denominación</span><span>Matrícula</span></li>' : '') +
+      (items.length ? items.map(x =>
+      `<li data-id="${x.id}" class="inv-fila ${rep && String(rep.id_equipo) === String(x.id) ? 'marcado' : ''}"><span>${esc(x.clase || '')}</span><span>${esc(x.denominacion || '')}</span><span>${esc(x.matricula || '')}</span></li>`).join('')
+      : '<li class="vacio">' + (listaCat('inventario').length ? 'Nada coincide con la búsqueda' : 'La lista está vacía: pide en la oficina que pulsen "Enviar listas al móvil"') + '</li>');
     return;
   }
   const actual = { empresas: parte.empresa, faenas: parte.faena, clases: parte.clase, cereales: parte.cereal, tareas: parte.faena, tipotrabajo: parte.faena, equipos: parte.maquina }[selActual];
@@ -1628,7 +1633,7 @@ function abrirRep(r) {
   }
 }
 function pintarRep() {
-  const t = rep.matricula ? rep.matricula + ' · ' + rep.denominacion : rep.denominacion;
+  const t = [rep.clase, rep.denominacion, rep.matricula].filter(Boolean).join(' · ');
   pintarSelector('rEquipo', t, 'Elegir máquina…');
   $('rDenom').value = rep.denominacion || '';
 }
@@ -1641,7 +1646,7 @@ function leerRep() {
 $('rEnviar').addEventListener('click', async () => {
   if (window.pararDictado) pararDictado();
   leerRep();
-  if (!rep.denominacion && !rep.matricula) return toast('Elige la máquina (Matrícula / Reseña)');
+  if (!rep.denominacion && !rep.matricula) return toast('Elige la máquina');
   if (!rep.reparacion) { $('rRep').focus(); return toast('Escribe la reparación (qué le pasa)'); }
   if (rep.fecha > hoy()) return toast('La fecha no puede ser posterior a hoy');
   if (!rep.creado_movil) rep.creado_movil = new Date().toISOString();

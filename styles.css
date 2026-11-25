@@ -254,3 +254,9 @@ label.check input { width: 24px; height: 24px; min-height: 0; margin: 0; }
 .rep-fin:disabled { opacity: .6; }
 .check-fin { display: flex; align-items: center; gap: 10px; font-weight: 600; margin-top: 4px; }
 .check-fin input { width: 24px; height: 24px; margin: 0; }
+/* Máquina (Reparaciones): lista en tres columnas */
+#selLista li.inv-cab, #selLista li.inv-fila { display: grid; grid-template-columns: 1fr 1.3fr .9fr; gap: 8px; align-items: center; }
+#selLista li.inv-cab { font-weight: 700; font-size: .8em; color: #666; text-transform: uppercase; position: sticky; top: 0; background: #f3f3f3; cursor: default; }
+#selLista li.inv-fila span { overflow-wrap: anywhere; }
+#selLista li.inv-fila span:first-child { font-weight: 600; }
+#selLista li.inv-fila span:last-child { color: #555; }
