@@ -189,8 +189,8 @@ function filaParte(p) {
 function pintarTipos() {
   $('tiposParte').innerHTML = Object.entries(TIPOS).map(([k, t]) =>
     `<button type="button" class="tipo" data-tipo="${k}"><span>${t.icono}</span>${esc(t.nombre)}</button>`).join('') +
-    `<button type="button" class="tipo" data-tipo="horas"><span>⏱</span>Mis horas</button>` +
     `<button type="button" class="tipo" data-tipo="reparacion"><span>🔧</span>Reparaciones Pendientes</button>` +
+    `<button type="button" class="tipo" data-tipo="horas"><span>⏱</span>Mis horas</button>` +
     PROXIMOS.map(([i, n]) => `<button type="button" class="tipo pronto" disabled><span>${i}</span>${esc(n)}<small>Próximamente</small></button>`).join('');
 }
 $('tiposParte').addEventListener('click', e => { const b = e.target.closest('button[data-tipo]'); if (!b) return; if (b.dataset.tipo === 'horas') nuevasHoras(); else if (b.dataset.tipo === 'reparacion') nuevaRep(); else nuevoParte(b.dataset.tipo); });
